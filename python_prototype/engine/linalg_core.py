@@ -112,3 +112,12 @@ def lu_solve(n, A, b):
         x[i] = (y[i] - sum_ux) / U[i * n + i]
 
     return x    
+
+def arange(start, stop, step):
+    res = []
+    curr = start
+    epsilon = step / 100.0
+    while curr <= stop + epsilon:
+        res.append(curr)
+        curr += step
+    return res
