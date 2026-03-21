@@ -1,4 +1,12 @@
 * LV2-1 Two Voltage Sources
+*       --- Operating Point ---
+*V(n001):	 -3	 voltage
+*V(p001):	 7	 voltage
+*V(n002):	 4.33681e-07	 voltage
+*I(V1):	 -0.007	 device_current
+*I(R2):	 -0.0015	 device_current
+*I(R1):	 -0.007	 device_current
+*I(V2):	 0.0055	 device_current
 V1 N1 0 DC 10
 V2 N2 0 DC 3
 R1 N1 N2 1k

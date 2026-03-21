@@ -58,6 +58,11 @@ class Simulator:
         A = np.zeros((dim, dim), dtype=np.float64)
         b = np.zeros(dim, dtype=np.float64)
 
+        # 🚀 互感修復：確保 ctx 存在，並把變數地圖塞進去
+        if ctx is None: 
+            ctx = {'mode': 'op'}
+        ctx['extra_map'] = self.extra_var_map
+
         for el in self.circuit.elements:
             extra_idx = self.extra_var_map.get(el)
             el.stamp(A, b, extra_idx=extra_idx, ctx=ctx)
@@ -65,7 +70,6 @@ class Simulator:
         start_t = time.time()
         try:
             x = np.linalg.solve(A, b)
-            # 工業級可信度指標：殘差檢查
             residual = np.max(np.abs(np.dot(A, x) - b))
             
             return SolverResult(
@@ -99,10 +103,8 @@ class Simulator:
         # 建立頻率軸 (修正 OCT 語意)
         sweep_type = sweep_type.upper()
         if sweep_type == 'DEC':
-            # 十倍頻：points 代表每十倍頻點數 (這裡簡化為總點數，若要完全貼合 SPICE 可再微調)
             freqs = np.logspace(np.log10(f_start), np.log10(f_stop), points)
         elif sweep_type == 'OCT':
-            # 八倍頻：points 代表每八度音階 (Octave) 點數
             octaves = np.log2(f_stop / f_start)
             total_points = max(2, int(octaves * points) + 1)
             freqs = np.logspace(np.log10(f_start), np.log10(f_stop), total_points)
@@ -114,7 +116,9 @@ class Simulator:
             # 確保使用複數矩陣
             A_ac = np.zeros((dim, dim), dtype=np.complex128)
             b_ac = np.zeros(dim, dtype=np.complex128)
-            ctx = {'freq': f}
+            
+            # 🚀 互感修復：補上 'mode': 'ac' 以及 'extra_map'
+            ctx = {'mode': 'ac', 'freq': f, 'extra_map': self.extra_var_map}
             
             for el in self.circuit.elements:
                 extra_idx = self.extra_var_map.get(el)
@@ -122,14 +126,13 @@ class Simulator:
             
             try:
                 x_ac = np.linalg.solve(A_ac, b_ac)
-                # 計算 AC 殘差 (||Ax - b||∞)
                 residual = np.max(np.abs(np.dot(A_ac, x_ac) - b_ac))
                 
                 ac_results.append({
                     "freq": f,
                     "x": x_ac,
                     "status": "SUCCESS",
-                    "residual": float(residual) # 儲存殘差以供診斷
+                    "residual": float(residual)
                 })
             except np.linalg.LinAlgError as e:
                 ac_results.append({
@@ -151,7 +154,7 @@ class Simulator:
     def solve_dc_sweep(self, source_name, start_v, stop_v, step_v):
         """
         執行 DC Sweep 分析。
-        修復點 A.3：元件名稱比對忽略大小寫，確保魯棒性。
+        修復：正確判定目標元件使用的是 .dc_value 還是 .value
         """
         source_name = source_name.upper()
         target = next((el for el in self.circuit.elements if el.name.upper() == source_name), None)
@@ -160,18 +163,90 @@ class Simulator:
             return [{"status": "ERROR", "msg": f"Source '{source_name}' not found for DC sweep"}]
 
         sweep_results = []
-        original_val = getattr(target, 'value', 0.0) # 備份原值
         
-        # 產生包含終點的掃描陣列
+        # 備份原值 (優先找 dc_value，找不到再找 value)
+        original_val = getattr(target, 'dc_value', getattr(target, 'value', 0.0))
+        
         v_points = np.arange(start_v, stop_v + (step_v * 0.1), step_v)
         
         for v in v_points:
-            target.value = v
-            res = self.solve_op()
+            # 根據元件屬性動態更新數值
+            if hasattr(target, 'dc_value'):
+                target.dc_value = v
+            elif hasattr(target, 'value'):
+                target.value = v
+                
+            res = self.solve_op() # solve_op 會自動注入 extra_map
             sweep_results.append({"v_in": v, "result": res})
             
-        target.value = original_val # 恢復原值
+        # 恢復原值
+        if hasattr(target, 'dc_value'):
+            target.dc_value = original_val
+        elif hasattr(target, 'value'):
+            target.value = original_val
+            
         return sweep_results
+
+    def solve_tran(self, tstep, tstop):
+        """暫態分析 (.TRAN)"""
+        dim = self._prepare_mna_structure()
+        if dim == 0: return []
+
+        results = []
+
+        # --- Step 1: Initial Condition (t=0 的初始狀態) ---
+        # 🚀 互感修復：初始 OP 也需要變數地圖
+        op_res = self.solve_op(ctx={'mode': 'op', 'extra_map': self.extra_var_map})
+        if op_res.status != "SUCCESS":
+            return [{"status": "ERROR", "msg": f"Initial OP failed: {op_res.error_msg}"}]
+        
+        x_prev = op_res.x
+        results.append({"time": 0.0, "x": x_prev.copy(), "status": "SUCCESS"})
+
+        # --- Step 2: 喚醒儲能元件的記憶體 ---
+        for el in self.circuit.elements:
+            if hasattr(el, 'update_history'):
+                if el.__class__.__name__ == 'Capacitor':
+                    el.update_history(x_prev)
+                elif el.__class__.__name__ == 'Inductor':
+                    extra_idx = self.extra_var_map.get(el)
+                    el.update_history(x_prev, extra_idx)
+
+        # --- Step 3: 開始時間迴圈 (Time Marching) ---
+        t_points = np.arange(tstep, tstop + (tstep * 0.1), tstep)
+        
+        for t in t_points:
+            A = np.zeros((dim, dim), dtype=np.float64)
+            b = np.zeros(dim, dtype=np.float64)
+            
+            # 🚀 互感修復：把 extra_map 塞進時域 ctx 裡
+            ctx = {'mode': 'tran', 't': t, 'dt': tstep, 'extra_map': self.extra_var_map}
+            
+            for el in self.circuit.elements:
+                extra_idx = self.extra_var_map.get(el)
+                el.stamp(A, b, extra_idx=extra_idx, ctx=ctx)
+                
+            try:
+                x_new = np.linalg.solve(A, b)
+                results.append({"time": t, "x": x_new.copy(), "status": "SUCCESS"})
+                
+                # --- Step 4: 更新歷史 ---
+                for el in self.circuit.elements:
+                    if hasattr(el, 'update_history'):
+                        if el.__class__.__name__ == 'Capacitor':
+                            el.update_history(x_new)
+                        elif el.__class__.__name__ == 'Inductor':
+                            extra_idx = self.extra_var_map.get(el)
+                            el.update_history(x_new, extra_idx)
+                            
+            except np.linalg.LinAlgError as e:
+                results.append({"time": t, "status": "SINGULAR", "msg": str(e)})
+                break
+            except Exception as e:
+                results.append({"time": t, "status": "FAILURE", "msg": str(e)})
+                break
+                
+        return results
 
     def get_full_report(self, solution_vec):
         """

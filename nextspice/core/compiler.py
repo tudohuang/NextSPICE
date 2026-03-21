@@ -7,6 +7,7 @@ class SpiceParser:
     """
     NextSPICE Canonical Compiler (v0.3.1)
     修復：GND 前線正規化、解決 Aliasing 與 Missing Ground 誤判
+    新增：K 元件 (Mutual Inductance) 支援
     """
     def __init__(self, file_path=None, content=None):
         self.file_path = file_path or "memory_buffer.cir"
@@ -121,10 +122,12 @@ class SpiceParser:
                     if prefix == 'R': self._parse_resistor(item)
                     elif prefix == 'C': self._parse_capacitor(item)
                     elif prefix == 'L': self._parse_inductor(item)
+                    # 🚀 在這裡補上了 K 元件的攔截點！
+                    elif prefix == 'K': self._parse_mutual_inductance(item)
                     elif prefix in ['V', 'I']: self._parse_source(item, prefix)
                     elif prefix == 'E': self._parse_vcvs(item)
                     elif prefix == 'D': self._parse_diode(item)
-                    elif prefix == 'X': self._parse_subckt_call(item) # 為 Boss 關卡預留
+                    elif prefix == 'X': self._parse_subckt_call(item) 
                     else:
                         self._log_diag(ln, "WARNING", f"Unsupported prefix '{prefix}' for {name}")
                 except Exception as e:
@@ -233,6 +236,19 @@ class SpiceParser:
             "value": UnitConverter.parse(tk[3])
         })
 
+    # 🚀 新增：互感 (Mutual Inductance) 解析器
+    def _parse_mutual_inductance(self, item):
+        tk = item["tokens"]
+        if len(tk) < 4: raise ValueError("K requires 2 target inductors and a coupling coefficient")
+        self.circuit["elements"].append({
+            "type": "mutual_inductance", 
+            "name": tk[0].upper(),
+            # K 元件沒有自己的接腳，它直接綁定兩個電感的名字
+            "element1": tk[1].upper(),
+            "element2": tk[2].upper(),
+            "value": UnitConverter.parse(tk[3])
+        })
+
     def _parse_diode(self, item):
         tk = item["tokens"]
         if len(tk) < 4: raise ValueError("D requires A, K nodes and model")
@@ -243,11 +259,9 @@ class SpiceParser:
         })
 
     def _parse_subckt_call(self, item):
-        """讓包含子電路的 Boss 關卡不會因為找不到元件腳位而誤判沒接 GND"""
         tk = item["tokens"]
         if len(tk) < 3: raise ValueError("X requires nodes and subckt name")
         subname = tk[-1].upper()
-        # 把中間的所有腳位都正規化
         nodes = [self._norm_node(n) for n in tk[1:-1]]
         pins = {f"p{i}": n for i, n in enumerate(nodes)}
         self.circuit["elements"].append({

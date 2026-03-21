@@ -1,0 +1,14 @@
+* NextSPICE Transient Challenge: RLC Underdamped Ringing
+* 測試目標：PULSE波形產生、L與C的伴隨模型、Backward Euler數值積分
+
+* 產生一個方波：初始 0V，脈衝 5V，延遲 1ms 觸發，上升/下降 1us，持續 4ms，週期 10ms
+V1 IN 0 PULSE(0 5 1m 1u 1u 4m 10m)
+
+* RLC 串聯電路
+R1 IN N1 10
+L1 N1 OUT 10m
+C1 OUT 0 1u
+
+* 執行暫態分析：時間步長 10us，總時長 10ms
+.TRAN 10u 10m
+.END

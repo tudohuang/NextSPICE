@@ -1,4 +1,12 @@
 * LV1-1 Basic Divider
+* --- Operating Point ---
+*V(n003):	 -5	 voltage
+*V(n001):	 5	 voltage
+*V(n002):	 0	 voltage
+*I(V1):	 -0.005	 device_current
+*I(R2):	 -0.005	 device_current
+*I(R1):	 -0.005	 device_current
+
 V1 IN 0 DC 10
 R1 IN MID 1k
 R2 MID 0 1k

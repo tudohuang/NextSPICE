@@ -1,4 +1,12 @@
 * LV1-4 Mixed Voltage and Current Sources
+* --- Operating Point ---
+*V(n002):	 -1	 voltage
+*V(p001):	 4	 voltage
+*V(n001):	 0	 voltage
+*I(V1):	 -0.002	 device_current
+*I(R2):	 -0.001	 device_current
+*I(I1):	 0.001	 device_current
+*I(R1):	 -0.002	 device_current
 V1 N1 0 DC 5
 I1 N2 0 DC 1m
 R1 N1 N2 2k

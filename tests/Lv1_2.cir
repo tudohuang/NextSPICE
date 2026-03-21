@@ -1,4 +1,13 @@
 * LV1-2 Resistor Ladder
+*       --- Operating Point ---
+*V(n004):	 -6	 voltage
+*V(n003):	 8.67362e-07	 voltage
+*V(n001):	 6	 voltage
+*V(n002):	 4	 voltage
+*I(V1):	 -0.002	 device_current
+*I(R2):	 -0.002	 device_current
+*I(R3):	 -0.002	 device_current
+*I(R1):	 -0.002	 device_current
 V1 N1 0 DC 12
 R1 N1 N2 1k
 R2 N2 N3 2k

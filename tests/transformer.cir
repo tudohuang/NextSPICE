@@ -1,0 +1,21 @@
+* NextSPICE Challenge: 1:2 Step-Up Transformer
+* 測試目標：互感 K 元件 (Mutual Inductance)、跨線圈能量傳輸
+
+* === 初級線圈 (Primary) ===
+* 輸入一個 10V 振幅、1kHz 的正弦波
+V1 P_IN 0 SIN(0 10 1k)
+R1 P_IN P_NODE 1
+L1 P_NODE 0 10m
+
+* === 次級線圈 (Secondary) ===
+* 這裡完全沒有連接任何電源！純靠磁場感應！
+L2 S_NODE 0 40m
+RLOAD S_NODE 0 1k
+
+* === 磁交連 (Mutual Inductance) ===
+* 耦合係數 k = 0.99 (近乎完美的變壓器)
+K1 L1 L2 0.99
+
+* 暫態分析：步長 10us，總時間 5ms (可觀察 5 個完整弦波)
+.TRAN 10u 5m
+.END

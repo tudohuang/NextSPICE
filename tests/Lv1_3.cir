@@ -1,4 +1,10 @@
 * LV1-3 Current Source Injection
+*       --- Operating Point ---
+*V(n001):	 0	 voltage
+*V(n002):	 -2	 voltage
+*I(I1):	 0.002	 device_current
+*I(R1):	 0.002	 device_current
+
 I1 N1 0 DC 2m
 R1 N1 0 1k
 .OP

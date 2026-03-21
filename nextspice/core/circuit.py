@@ -1,18 +1,16 @@
-from .elements import Resistor, VoltageSource, CurrentSource, Capacitor
-
+from .elements import Resistor, VoltageSource, CurrentSource, Capacitor, Inductor, MutualInductance,VCVS
+from .unit_conv import UnitConverter
 class NodeManager:
     """
     職責：管理節點名稱與矩陣索引的對應。
     SPICE 標準：'0', 'GND', 'GROUND' 永遠映射到 0 (參考地)。
     """
     def __init__(self):
-        # 修復點 4：維護雙向映射，避免 get_name() 的線性搜尋
         self.mapping = {"0": 0}
         self.rev_mapping = {0: "0"}
-        self.count = 1  # 矩陣未知數索引從 1 開始
+        self.count = 1  
 
     def get_index(self, name):
-        """將節點名稱轉為矩陣索引 (1-based)"""
         name = str(name).upper()
         if name in ["GND", "GROUND"]: 
             name = "0"
@@ -24,16 +22,13 @@ class NodeManager:
         return self.mapping[name]
 
     def get_name(self, index):
-        """修復點 4：透過 rev_mapping 達成 O(1) 查詢"""
         return self.rev_mapping.get(index, "UNKNOWN")
 
     @property
     def num_unknowns(self):
-        """修復點 4: 傳回未知數數量 (不含地線)"""
         return self.count - 1
 
 class BuildResult:
-    """封裝電路構建結果與診斷資訊"""
     def __init__(self, success=True, errors=None, warnings=None, infos=None):
         self.success = success
         self.errors = errors or []
@@ -47,11 +42,8 @@ class BuildResult:
     def __repr__(self):
         return (f"BuildResult(success={self.success}, errors={len(self.errors)}, "
                 f"warnings={len(self.warnings)})")
+
 class Circuit:
-    """
-    NextSPICE 電路容器 (v0.2)
-    職責：實體化元件、管理 NodeManager、並收集構建階段的診斷。
-    """
     def __init__(self, name="NextSPICE_Project"):
         self.name = name
         self.elements = []
@@ -63,9 +55,6 @@ class Circuit:
         self.elements.append(element)
 
     def build_from_json(self, circuit_json):
-        """
-        修復點 3 & 9：結構化構建邏輯與明確的支援範圍驗證。
-        """
         self.build_errors = []
         self.params = circuit_json.get("params", {})
         
@@ -74,42 +63,11 @@ class Circuit:
             ename = entry.get("name", "UNKNOWN")
             
             try:
-                # 根據型別分發實體化
                 if etype == "resistor":
                     p = self.node_mgr.get_index(entry["pins"]["p"])
                     n = self.node_mgr.get_index(entry["pins"]["n"])
                     val = entry.get("value", 1e-12)
                     self.add_element(Resistor(ename, p, n, val))
-
-                elif etype == "voltage_source":
-                    p = self.node_mgr.get_index(entry["pins"]["positive"])
-                    n = self.node_mgr.get_index(entry["pins"]["negative"])
-                    dc_val = entry.get("dc_value", 0.0)
-                    
-                    # 關鍵修復：把 AC 振幅與相位確實傳給元件！
-                    self.add_element(VoltageSource(
-                        ename, p, n, 
-                        dc_value=dc_val,
-                        ac_mag=entry.get("ac_magnitude"),
-                        ac_phase=entry.get("ac_phase_deg"),
-                        tran=entry.get("tran_waveform")
-                    ))
-
-                elif etype == "current_source":
-                    p = self.node_mgr.get_index(entry["pins"]["positive"])
-                    n = self.node_mgr.get_index(entry["pins"]["negative"])
-                    dc_val = entry.get("dc_value", 0.0)
-                    
-                    # 電流源也要接通 AC 參數
-                    self.add_element(CurrentSource(
-                        ename, p, n, 
-                        dc_value=dc_val,
-                        ac_mag=entry.get("ac_magnitude"),
-                        ac_phase=entry.get("ac_phase_deg"),
-                        tran=entry.get("tran_waveform")
-                    ))
-
-
 
                 elif etype == "capacitor":
                     p = self.node_mgr.get_index(entry["pins"]["p"])
@@ -117,8 +75,79 @@ class Circuit:
                     val = entry.get("value", 1e-12)
                     self.add_element(Capacitor(ename, p, n, val))
 
-                # 修復點 9：明確攔截已 parse 但未實做的元件 (Inductor, Diode)
-                elif etype in ["inductor", "diode", "mosfet"]:
+                elif etype == "inductor":
+                    p = self.node_mgr.get_index(entry["pins"]["p"])
+                    n = self.node_mgr.get_index(entry["pins"]["n"])
+                    val = entry.get("value", 1e-9)
+                    self.add_element(Inductor(ename, p, n, val))
+
+                elif etype == "voltage_source":
+                    p = self.node_mgr.get_index(entry["pins"]["positive"])
+                    n = self.node_mgr.get_index(entry["pins"]["negative"])
+                    
+                    dc_val = entry.get("dc_value", 0.0)
+                    tran_wave = entry.get("tran_waveform")
+                    
+                    # 🛡️ 智慧波形重組：修復 UnitConverter 沒報錯造成的錯位
+                    if isinstance(dc_val, str):
+                        try:
+                            dc_val = float(dc_val)
+                        except ValueError:
+                            # 轉數字失敗，代表它是 "PULSE" 或 "SIN"！
+                            # 把字串拼回 tran_waveform，並把 dc_value 歸零
+                            tran_wave = f"{dc_val} {tran_wave or ''}".strip()
+                            dc_val = 0.0
+
+                    self.add_element(VoltageSource(
+                        ename, p, n, 
+                        dc_value=dc_val,
+                        ac_mag=entry.get("ac_magnitude"),
+                        ac_phase=entry.get("ac_phase_deg"),
+                        tran=tran_wave
+                    ))
+
+                elif etype == "current_source":
+                    p = self.node_mgr.get_index(entry["pins"]["positive"])
+                    n = self.node_mgr.get_index(entry["pins"]["negative"])
+                    
+                    dc_val = entry.get("dc_value", 0.0)
+                    tran_wave = entry.get("tran_waveform")
+                    
+                    # 🛡️ 電流源也套用一樣的防呆保護
+                    if isinstance(dc_val, str):
+                        try:
+                            dc_val = float(dc_val)
+                        except ValueError:
+                            tran_wave = f"{dc_val} {tran_wave or ''}".strip()
+                            dc_val = 0.0
+                    
+                    self.add_element(CurrentSource(
+                        ename, p, n, 
+                        dc_value=dc_val,
+                        ac_mag=entry.get("ac_magnitude"),
+                        ac_phase=entry.get("ac_phase_deg"),
+                        tran=tran_wave
+                    ))
+                elif etype == "mutual_inductance":
+                    # 必須從已經建好的 elements 裡面找出 L1 和 L2 的物件實體
+                    l1_name = entry["element1"].upper()
+                    l2_name = entry["element2"].upper()
+                    l1_obj = next((e for e in self.elements if e.name == l1_name and isinstance(e, Inductor)), None)
+                    l2_obj = next((e for e in self.elements if e.name == l2_name and isinstance(e, Inductor)), None)
+                    
+                    if not l1_obj or not l2_obj:
+                        self.build_errors.append(f"Mutual Inductance {ename} cannot find target inductors {l1_name} or {l2_name}")
+                    else:
+                        self.add_element(MutualInductance(ename, l1_obj, l2_obj, entry["value"]))                
+                elif etype == "vcvs":
+                    p = self.node_mgr.get_index(entry["pins"]["p"])
+                    n = self.node_mgr.get_index(entry["pins"]["n"])
+                    cp = self.node_mgr.get_index(entry["ctrl_pins"]["cp"])
+                    cn = self.node_mgr.get_index(entry["ctrl_pins"]["cn"])
+                    self.add_element(VCVS(ename, p, n, cp, cn, entry["gain"]))
+
+
+                elif etype in ["diode", "mosfet"]:
                     raise NotImplementedError(f"Element type '{etype}' is documented but solver implementation is pending.")
                 
                 else:
@@ -135,17 +164,12 @@ class Circuit:
         return BuildResult(success=success, errors=self.build_errors)
 
     def get_voltage_report(self, solution_vec):
-        """
-        修復點 5：生成 Canonical 節點報告。
-        """
         report = {}
-        # 遍歷 NodeManager 的 rev_mapping 確保只列出有效節點
         for idx in range(self.node_mgr.count):
             name = self.node_mgr.get_name(idx)
             if idx == 0:
                 report[name] = 0.0
             else:
-                # 矩陣索引是 0-based (solution_vec)，而 NodeManager 是 1-based (idx)
                 if idx - 1 < len(solution_vec):
                     report[name] = solution_vec[idx - 1]
         return report
