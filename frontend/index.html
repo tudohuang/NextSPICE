@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>NextSPICE Industrial Studio</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <style>
+        :root {
+            --bg-base: #1e1e1e;
+            --bg-panel: #252526;
+            --bg-sidebar: #181818;
+            --bg-menu: #333333;
+            --border: #3c3c3c;
+            --accent: #007acc;
+            --accent-hover: #005f9e;
+            --text-main: #cccccc;
+            --text-muted: #858585;
+            --console-info: #4FC1FF;
+            --console-err: #F48771;
+            --console-success: #89D185;
+            --console-warn: #CCA700;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* Menu & Toolbar */
+        .menu-bar {
+            height: 30px;
+            background-color: var(--bg-menu);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .menu-item {
+            position: relative;
+            padding: 5px 10px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .menu-item:hover {
+            background-color: #505050;
+            color: white;
+        }
+
+        .dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background-color: var(--bg-panel);
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            min-width: 180px;
+        }
+
+        .menu-item:hover .dropdown {
+            display: block;
+        }
+
+        .drop-item {
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .drop-item:hover {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .shortcut {
+            color: var(--text-muted);
+            font-size: 11px;
+        }
+
+        .drop-item:hover .shortcut {
+            color: #dddddd;
+        }
+
+        .toolbar {
+            height: 36px;
+            background-color: var(--bg-panel);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            border-bottom: 1px solid var(--border);
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .tool-btn {
+            background-color: transparent;
+            color: var(--text-main);
+            border: 1px solid transparent;
+            padding: 4px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            outline: none;
+            display: flex;
+            align-items: center;
+            user-select: none;
+        }
+
+        .tool-btn:hover {
+            background-color: #333333;
+            border: 1px solid #555555;
+        }
+
+        .tool-btn.primary {
+            background-color: var(--accent);
+            color: #ffffff;
+            border: 1px solid var(--accent);
+        }
+
+        .tool-btn.primary:hover {
+            background-color: var(--accent-hover);
+        }
+
+        /* Layout & Panels */
+        .main-container {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .panel-header {
+            background-color: var(--bg-panel);
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 6px 15px;
+            border-bottom: 1px solid var(--border);
+            user-select: none;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Sidebar Workspace */
+        .sidebar {
+            width: 220px;
+            background-color: var(--bg-sidebar);
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        #file-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 5px 0;
+            margin: 0;
+            list-style: none;
+            font-size: 13px;
+        }
+
+        .file-item {
+            padding: 4px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-item:hover {
+            background-color: #2a2d2e;
+        }
+
+        .file-item.active {
+            background-color: #37373d;
+            color: white;
+            border-left: 2px solid var(--accent);
+            padding-left: 13px;
+        }
+
+        .file-icon {
+            color: #fbc531;
+            font-weight: bold;
+        }
+
+        /* Center Column (Editor + Term) */
+        .center-col {
+            width: 40%;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            min-width: 0;
+        }
+
+        #editor-container {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+        }
+
+        #editor {
+            position: absolute;
+            inset: 0;
+        }
+
+        .terminal-wrapper {
+            height: 200px;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid var(--border);
+            background-color: var(--bg-base);
+            flex-shrink: 0;
+        }
+
+        #console-output {
+            flex: 1;
+            padding: 8px 15px 0 15px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            color: var(--text-main);
+            line-height: 1.6;
+            user-select: text;
+        }
+
+        .term-input-row {
+            display: flex;
+            padding: 5px 15px 10px 15px;
+            align-items: center;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+        }
+
+        .prompt {
+            color: var(--console-info);
+            margin-right: 8px;
+            font-weight: bold;
+        }
+
+        #cmd-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-family: inherit;
+            font-size: inherit;
+            outline: none;
+        }
+
+        /* Right Column (Plotly & Data Table) */
+        .right-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-base);
+            min-width: 0;
+        }
+
+        .plot-wrapper {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-base);
+        }
+
+        #plot-area {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .empty-state {
+            color: var(--text-muted);
+            font-size: 14px;
+            user-select: none;
+        }
+
+        /* 🚀 專屬工業級 OP 數據表格樣式 */
+        .table-container {
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: var(--bg-base);
+        }
+
+        .op-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            color: #cccccc;
+        }
+
+        .op-table th {
+            background-color: var(--bg-panel);
+            color: var(--accent);
+            text-align: left;
+            padding: 10px 15px;
+            border-bottom: 2px solid var(--border);
+            position: sticky;
+            top: 0;
+            font-weight: normal;
+        }
+
+        .op-table td {
+            padding: 8px 15px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .op-table tr:hover {
+            background-color: #2a2d2e;
+        }
+
+        .val-positive {
+            color: var(--console-success);
+        }
+
+        .val-negative {
+            color: var(--console-err);
+        }
+
+        .val-zero {
+            color: var(--text-muted);
+        }
+
+        .status-bar {
+            height: 22px;
+            background-color: var(--accent);
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 11px;
+            color: #ffffff;
+            flex-shrink: 0;
+        }
+
+        #folder-input {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <input type="file" id="folder-input" webkitdirectory directory multiple onchange="loadWorkspace(event)">
+
+    <div class="menu-bar">
+        <div class="menu-item">File
+            <div class="dropdown">
+                <div class="drop-item" onclick="document.getElementById('folder-input').click()">Open Workspace... <span
+                        class="shortcut"></span></div>
+                <div class="drop-item" onclick="runSimulation()">Run Simulation <span class="shortcut">F5</span></div>
+                <div class="drop-item" onclick="exportCSV()">Export CSV <span class="shortcut"></span></div>
+            </div>
+        </div>
+        <div class="menu-item">Edit
+            <div class="dropdown">
+                <div class="drop-item" onclick="if(window.editor) window.editor.setValue('')">Clear Editor</div>
+            </div>
+        </div>
+        <div class="menu-item">Terminal
+            <div class="dropdown">
+                <div class="drop-item" onclick="document.getElementById('console-output').innerHTML=''">Clear Console
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <button class="tool-btn primary" onclick="runSimulation()">Run Simulation</button>
+        <button class="tool-btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="panel-header">EXPLORER <span style="cursor:pointer;"
+                    onclick="document.getElementById('folder-input').click()" title="Open Folder">📁</span></div>
+            <ul id="file-list">
+                <li style="padding: 10px; color:var(--text-muted); font-size:12px; text-align:center;">Click 📁 to open
+                    folder</li>
+            </ul>
+        </div>
+
+        <div class="center-col">
+            <div class="panel-header" id="current-file-name">untitled.cir</div>
+            <div id="editor-container">
+                <div id="editor"></div>
+            </div>
+
+            <div class="terminal-wrapper">
+                <div class="panel-header">Terminal Output</div>
+                <div id="console-output"><span style="color: var(--console-info);">[INFO] NextSPICE v1.4 Engine
+                        Ready.</span><br></div>
+                <div class="term-input-row">
+                    <span class="prompt">PS C:\NextSPICE></span>
+                    <input type="text" id="cmd-input" autocomplete="off" spellcheck="false"
+                        onkeydown="handleTerminal(event)">
+                </div>
+            </div>
+        </div>
+
+        <div class="right-col">
+            <div class="panel-header" id="viewer-header">Waveform Viewer</div>
+            <div class="plot-wrapper">
+                <div id="plot-area">
+                    <div class="empty-state">No simulation data. Click "Run Simulation".</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar"><span id="status-text">Ready</span></div>
+
+    <script>
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+        require(['vs/editor/editor.main'], function () {
+            window.editor = monaco.editor.create(document.getElementById('editor'), {
+                value: "* Try an OP Analysis!\nV1 IN 0 DC 12\nR1 IN MID 1k\nR2 MID 0 2k\n.OP\n.END",
+                language: 'ini', theme: 'vs-dark', automaticLayout: true, fontSize: 13, fontFamily: "'Consolas', monospace", minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 10, bottom: 10 }
+            });
+            window.editor.addCommand(monaco.KeyCode.F5, function () { runSimulation(); });
+        });
+
+        const consoleOut = document.getElementById('console-output');
+        const statusText = document.getElementById('status-text');
+        const viewerHeader = document.getElementById('viewer-header');
+        let workspaceFiles = {};
+
+        function appendLog(msg, type = "info") {
+            let color = "var(--text-main)";
+            if (type === "error") color = "var(--console-err)";
+            else if (type === "warn") color = "var(--console-warn)";
+            else if (type === "success") color = "var(--console-success)";
+            else if (type === "system") color = "var(--console-info)";
+            consoleOut.innerHTML += `<span style="color:${color};">${msg}</span><br>`;
+            consoleOut.scrollTop = consoleOut.scrollHeight;
+        }
+
+        function handleTerminal(e) {
+            if (e.key === 'Enter') {
+                const cmd = e.target.value.trim();
+                e.target.value = '';
+                if (!cmd) return;
+                appendLog(`PS C:\\NextSPICE> ${cmd}`, "system");
+                const args = cmd.split(" ");
+                switch (args[0].toLowerCase()) {
+                    case 'clear': case 'cls': consoleOut.innerHTML = ''; break;
+                    case 'run': runSimulation(); break;
+                    case 'help': appendLog("Commands: run, clear, help"); break;
+                    default: appendLog(`Term: '${args[0]}' not recognized.`, "error");
+                }
+            }
+        }
+
+        function loadWorkspace(event) {
+            const files = event.target.files;
+            if (files.length === 0) return;
+            const fileListUI = document.getElementById('file-list');
+            fileListUI.innerHTML = '';
+            workspaceFiles = {};
+            appendLog(`[SYS] Loaded workspace: ${files.length} files.`, "system");
+            Array.from(files).forEach((file, index) => {
+                if (file.name.endsWith('.cir') || file.name.endsWith('.sp') || file.name.endsWith('.txt')) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        workspaceFiles[file.name] = e.target.result;
+                        const li = document.createElement('li');
+                        li.className = 'file-item';
+                        li.innerHTML = `<span class="file-icon">⚡</span> ${file.name}`;
+                        li.onclick = () => openFile(file.name, li);
+                        fileListUI.appendChild(li);
+                        if (index === 0) openFile(file.name, li);
+                    };
+                    reader.readAsText(file);
+                }
+            });
+        }
+
+        function openFile(filename, element) {
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            if (element) element.classList.add('active');
+            if (window.editor && workspaceFiles[filename]) {
+                window.editor.setValue(workspaceFiles[filename]);
+                document.getElementById('current-file-name').innerText = filename;
+            }
+        }
+
+        // --- 🚀 智慧渲染引擎 (自動判斷畫圖或畫表) ---
+        async function runSimulation() {
+            if (!window.editor) return;
+            const netlist = window.editor.getValue();
+            statusText.innerText = "Simulating...";
+            appendLog("[SYS] Executing simulation...", "system");
+
+            try {
+                const response = await fetch('/api/simulate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ netlist: netlist })
+                });
+
+                const result = await response.json();
+
+                if (result.logs) {
+                    result.logs.forEach(log => {
+                        let cleanLog = log.replace(/[❌⚠️✓🚀]/g, '').trim();
+                        if (cleanLog.includes("ERROR") || cleanLog.includes("失敗")) appendLog("[ERR] " + cleanLog, "error");
+                        else if (cleanLog.includes("完成") || cleanLog.includes("SUCCESS")) appendLog("[OK] " + cleanLog, "success");
+                        else if (cleanLog.includes("---")) appendLog("\n" + cleanLog, "system");
+                        else appendLog("      " + cleanLog);
+                    });
+                }
+
+                // 🌟 核心判斷：有圖就畫圖，沒圖有 OP 數據就畫表格！
+                if (result.status === "success" && result.plots && result.plots.length > 0) {
+                    viewerHeader.innerText = "Waveform Viewer";
+                    drawPlot(result.plots, result.layout);
+                    statusText.innerText = "Simulation Complete";
+                }
+                else if (result.status === "success" && result.op_results && Object.keys(result.op_results).length > 0) {
+                    viewerHeader.innerText = "Operating Point (DC Analysis) Data";
+                    drawDataGrid(result.op_results);
+                    statusText.innerText = "OP Analysis Complete";
+                }
+                else {
+                    statusText.innerText = "Ready";
+                    viewerHeader.innerText = "Waveform Viewer";
+                    const plotArea = document.getElementById('plot-area');
+                    Plotly.purge(plotArea);
+                    plotArea.innerHTML = '<div class="empty-state">Simulation finished with no graphical or OP data.</div>';
+                    window.lastPlotData = null;
+                }
+
+            } catch (err) {
+                appendLog(`[ERR] Communication failed.`, "error");
+                statusText.innerText = "Error";
+            }
+        }
+
+        // 🌟 新增：繪製極具科技感的數據表
+        function drawDataGrid(opData) {
+            const plotArea = document.getElementById('plot-area');
+            Plotly.purge(plotArea); // 徹底殺掉 Plotly，把畫布讓給表格
+            window.lastPlotData = null; // 清空舊的畫圖資料
+
+            let html = `<div class="table-container"><table class="op-table">
+                <thead><tr>
+                    <th>Node / Component Branch</th>
+                    <th>Value (Voltage / Current)</th>
+                </tr></thead><tbody>`;
+
+            // 將物件拆解成陣列並排序，讓 V 開頭的在前面，I 開頭的在後面
+            const entries = Object.entries(opData).sort((a, b) => a[0].localeCompare(b[0]));
+
+            entries.forEach(([key, val]) => {
+                let unit = key.startsWith('I(') ? 'A' : 'V';
+
+                // 判斷正負值來上色
+                let valClass = 'val-zero';
+                if (val > 1e-12) valClass = 'val-positive';
+                else if (val < -1e-12) valClass = 'val-negative';
+
+                // 工業標準的科學記號格式 (5位小數)
+                let formattedVal = val.toExponential(5);
+
+                html += `<tr>
+                    <td>${key}</td>
+                    <td class="${valClass}">${formattedVal} <span style="color:#666; font-size:11px; margin-left:5px;">${unit}</span></td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div>`;
+            plotArea.innerHTML = html;
+        }
+
+        function drawPlot(plotData, layoutConfig) {
+            const plotArea = document.getElementById('plot-area');
+
+            // 💥 修復關鍵：除了 Purge，還要物理性清空裡面的所有 HTML (殺掉資料表)
+            Plotly.purge(plotArea);
+            plotArea.innerHTML = "";
+            plotArea.style.display = 'block';
+
+            const traces = plotData.map(p => ({
+                x: p.x, y: p.y, name: p.name, mode: 'lines',
+                line: { dash: p.type === 'dash' ? 'dash' : 'solid', width: 1.5, shape: 'spline', smoothing: 0.3 }
+            }));
+
+            traces[0].line.color = '#00FF00';
+            if (traces[1]) traces[1].line.color = '#FF00FF';
+            if (traces[2]) traces[2].line.color = '#00FFFF';
+
+            const layout = {
+                title: { text: layoutConfig.title || 'Waveform Viewer', font: { size: 14, color: '#cccccc' }, x: 0.02, y: 0.98 },
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#aaaaaa', family: 'Consolas, monospace', size: 11 },
+                xaxis: { title: { text: layoutConfig.xaxis || 'X Axis', font: { size: 12 } }, gridcolor: '#2a2a2a', zerolinecolor: '#555555', type: layoutConfig.is_ac ? 'log' : 'linear', showline: true, linecolor: '#555555', mirror: true },
+                yaxis: { title: { text: layoutConfig.yaxis || 'Y Axis', font: { size: 12 } }, gridcolor: '#2a2a2a', zerolinecolor: '#555555', showline: true, linecolor: '#555555', mirror: true },
+                hovermode: 'x unified', hoverlabel: { bgcolor: '#252526', font: { family: 'Consolas' } },
+                margin: { t: 40, l: 50, r: 20, b: 40 },
+                legend: { font: { size: 11, color: '#cccccc' }, orientation: 'h', y: -0.15, x: 0, bgcolor: 'rgba(0,0,0,0)' },
+                autosize: true
+            };
+
+            Plotly.newPlot(plotArea, traces, layout, { responsive: true, displaylogo: false });
+            window.lastPlotData = plotData;
+            window.lastXLabel = layoutConfig.xaxis;
+        }
+
+        function exportCSV() {
+            if (!window.lastPlotData) { appendLog("[ERR] No plot data to export.", "error"); return; }
+            appendLog("[SYS] Generating CSV...", "system");
+            try {
+                let csv = (window.lastXLabel || "X_Axis") + "," + window.lastPlotData.map(t => t.name).join(",") + "\n";
+                let len = window.lastPlotData[0].x.length;
+                for (let i = 0; i < len; i++) {
+                    csv += window.lastPlotData[0].x[i] + "," + window.lastPlotData.map(t => t.y[i] !== undefined ? t.y[i] : "").join(",") + "\n";
+                }
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                a.download = "Simulation_Export.csv";
+                a.click();
+                appendLog("[OK] CSV Downloaded.", "success");
+            } catch (err) {
+                appendLog(`[ERR] Export Failed: ${err.message}`, "error");
+            }
+        }
+    </script>
+</body>
+
+</html>
