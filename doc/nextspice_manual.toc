@@ -1,0 +1,86 @@
+\contentsline {section}{\numberline {1}系統總覽}{3}{section.1}%
+\contentsline {subsection}{\numberline {1.1}NextSPICE 簡介}{3}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}系統架構分層}{3}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}原始碼檔案總覽}{3}{subsection.1.3}%
+\contentsline {section}{\numberline {2}網表語法與編譯器}{4}{section.2}%
+\contentsline {subsection}{\numberline {2.1}SPICE 網表格式}{4}{subsection.2.1}%
+\contentsline {subsubsection}{\numberline {2.1.1}元件語法}{4}{subsubsection.2.1.1}%
+\contentsline {subsubsection}{\numberline {2.1.2}分析指令語法}{5}{subsubsection.2.1.2}%
+\contentsline {subsection}{\numberline {2.2}單位轉換系統}{5}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}編譯流程}{5}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}子電路展平演算法}{6}{subsection.2.4}%
+\contentsline {section}{\numberline {3}修正節點分析法（MNA）}{7}{section.3}%
+\contentsline {subsection}{\numberline {3.1}理論基礎}{7}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}元件戳印法（Stamping）}{7}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}電阻器}{7}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}電壓源}{8}{subsubsection.3.2.2}%
+\contentsline {subsubsection}{\numberline {3.2.3}電流源}{8}{subsubsection.3.2.3}%
+\contentsline {subsubsection}{\numberline {3.2.4}電容器}{8}{subsubsection.3.2.4}%
+\contentsline {paragraph}{直流模式（.OP）：}{8}{subsubsection.3.2.4}%
+\contentsline {paragraph}{交流模式（.AC）：}{8}{subsubsection.3.2.4}%
+\contentsline {paragraph}{暫態模式（.TRAN）：}{8}{equation.3.9}%
+\contentsline {subsubsection}{\numberline {3.2.5}電感器}{9}{subsubsection.3.2.5}%
+\contentsline {paragraph}{直流模式：}{9}{equation.3.13}%
+\contentsline {paragraph}{交流模式：}{9}{equation.3.14}%
+\contentsline {paragraph}{暫態模式：}{9}{equation.3.15}%
+\contentsline {subsubsection}{\numberline {3.2.6}互感（Mutual Inductance）}{9}{subsubsection.3.2.6}%
+\contentsline {paragraph}{交流模式：}{9}{equation.3.19}%
+\contentsline {paragraph}{暫態模式：}{9}{equation.3.21}%
+\contentsline {subsubsection}{\numberline {3.2.7}電壓控制電壓源（VCVS，E 元件）}{10}{subsubsection.3.2.7}%
+\contentsline {subsubsection}{\numberline {3.2.8}電壓控制電流源（VCCS，G 元件）}{10}{subsubsection.3.2.8}%
+\contentsline {subsubsection}{\numberline {3.2.9}電流控制電壓源（CCVS，H 元件）}{10}{subsubsection.3.2.9}%
+\contentsline {subsubsection}{\numberline {3.2.10}電流控制電流源（CCCS，F 元件）}{10}{subsubsection.3.2.10}%
+\contentsline {subsection}{\numberline {3.3}節點管理器}{10}{subsection.3.3}%
+\contentsline {section}{\numberline {4}時域波形產生器}{10}{section.4}%
+\contentsline {subsection}{\numberline {4.1}正弦波 SIN}{11}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}脈衝波 PULSE}{11}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}分段線性波 PWL}{11}{subsection.4.3}%
+\contentsline {section}{\numberline {5}分析演算法}{11}{section.5}%
+\contentsline {subsection}{\numberline {5.1}直流工作點分析（.OP）}{11}{subsection.5.1}%
+\contentsline {paragraph}{演算法步驟：}{12}{subsection.5.1}%
+\contentsline {paragraph}{特殊處理：}{12}{Item.17}%
+\contentsline {subsection}{\numberline {5.2}交流小訊號分析（.AC）}{12}{subsection.5.2}%
+\contentsline {paragraph}{頻率點產生：}{12}{subsection.5.2}%
+\contentsline {paragraph}{每個頻率點的計算：}{12}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}直流掃描分析（.DC）}{12}{subsection.5.3}%
+\contentsline {paragraph}{演算法：}{13}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}暫態分析（.TRAN）}{13}{subsection.5.4}%
+\contentsline {subsubsection}{\numberline {5.4.1}後向歐拉法原理}{13}{subsubsection.5.4.1}%
+\contentsline {subsubsection}{\numberline {5.4.2}伴隨電路模型（Companion Model）}{13}{subsubsection.5.4.2}%
+\contentsline {paragraph}{電容器的伴隨模型：}{13}{subsubsection.5.4.2}%
+\contentsline {paragraph}{電感器的伴隨模型：}{13}{equation.5.37}%
+\contentsline {subsubsection}{\numberline {5.4.3}暫態分析流程}{14}{subsubsection.5.4.3}%
+\contentsline {paragraph}{歷史更新公式：}{14}{Item.36}%
+\contentsline {subsection}{\numberline {5.5}靈敏度分析（.SENS）}{14}{subsection.5.5}%
+\contentsline {subsubsection}{\numberline {5.5.1}直流增益定義}{14}{subsubsection.5.5.1}%
+\contentsline {subsubsection}{\numberline {5.5.2}中央差分靈敏度}{14}{subsubsection.5.5.2}%
+\contentsline {subsection}{\numberline {5.6}參數掃描（.STEP）}{15}{subsection.5.6}%
+\contentsline {section}{\numberline {6}量測引擎}{15}{section.6}%
+\contentsline {subsection}{\numberline {6.1}.MEASURE TRAN 指令}{15}{subsection.6.1}%
+\contentsline {subsubsection}{\numberline {6.1.1}TRIG...TARG 雙點測量語法}{15}{subsubsection.6.1.1}%
+\contentsline {subsubsection}{\numberline {6.1.2}穿越點偵測演算法}{15}{subsubsection.6.1.2}%
+\contentsline {section}{\numberline {7}稀疏矩陣求解策略}{16}{section.7}%
+\contentsline {subsection}{\numberline {7.1}為何使用稀疏矩陣}{16}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}SciPy 稀疏矩陣工作流程}{16}{subsection.7.2}%
+\contentsline {section}{\numberline {8}電路建構器（Two-Pass 建構法）}{16}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Pass 1：獨立元件建構}{16}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Pass 2：交叉參照解析}{17}{subsection.8.2}%
+\contentsline {section}{\numberline {9}分析排程總管}{17}{section.9}%
+\contentsline {subsection}{\numberline {9.1}結果輸出格式}{17}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}功率計算}{18}{subsection.9.2}%
+\contentsline {section}{\numberline {10}支援的元件總覽}{18}{section.10}%
+\contentsline {section}{\numberline {11}完整模擬範例}{18}{section.11}%
+\contentsline {subsection}{\numberline {11.1}範例一：RC 低通濾波器頻率響應}{18}{subsection.11.1}%
+\contentsline {paragraph}{理論分析：}{18}{lstnumber.5.6}%
+\contentsline {subsection}{\numberline {11.2}範例二：RLC 暫態響應}{19}{subsection.11.2}%
+\contentsline {paragraph}{理論分析：}{19}{lstnumber.6.7}%
+\contentsline {subsection}{\numberline {11.3}範例三：變壓器互感模型}{19}{subsection.11.3}%
+\contentsline {paragraph}{理論分析：}{19}{lstnumber.7.9}%
+\contentsline {subsection}{\numberline {11.4}範例四：含參數的靈敏度分析}{19}{subsection.11.4}%
+\contentsline {paragraph}{手動驗證：}{20}{lstnumber.8.7}%
+\contentsline {section}{\numberline {12}端到端資料流程圖}{20}{section.12}%
+\contentsline {section}{\numberline {13}已知限制與未來展望}{21}{section.13}%
+\contentsline {subsection}{\numberline {13.1}目前限制}{21}{subsection.13.1}%
+\contentsline {subsection}{\numberline {13.2}效能特性}{21}{subsection.13.2}%
+\contentsline {section}{附錄 A：數學符號表}{21}{subsection.13.2}%
+\contentsline {section}{附錄 B：SPICE 網表快速參考}{22}{table.3}%

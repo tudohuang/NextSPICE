@@ -51,36 +51,68 @@ class Simulator:
         self.extra_by_name = {el.name.upper(): idx for el, idx in self.extra_var_map.items()}
         return self.dim
 
-    def solve_op(self, ctx=None):
+    def solve_op(self, ctx=None, max_iters=100, reltol=1e-3, abstol=1e-6):
+        """
+        🚀 NextSPICE 非線性直流工作點求解器 (Newton-Raphson Edition)
+        """
         dim = self._prepare_mna_structure()
         if dim == 0: 
             return SolverResult(status="EMPTY", error_msg="No unknown variables.")
 
-        # 🚀 魔法 1：改用 LIL 稀疏矩陣 (最適合動態塞資料的格式)
-        A = scipy.sparse.lil_matrix((dim, dim), dtype=np.float64)
-        b = np.zeros(dim, dtype=np.float64)
-
         if ctx is None: 
             ctx = self._make_ctx(mode='op')
 
-        for el in self.circuit.elements:
-            extra_idx = self.extra_var_map.get(el)
-            el.stamp(A, b, extra_idx=extra_idx, ctx=ctx)
-
+        # 1. 牛頓疊代：從瞎猜 0V 開始
+        x_guess = np.zeros(dim, dtype=np.float64)
         start_t = time.time()
-        try:
-            # 🚀 魔法 2：塞完資料後，壓縮成 CSR 格式 (解方程式最快的格式)
-            A_csr = A.tocsr()
-            # 🚀 魔法 3：呼叫 SciPy 的稀疏矩陣求解器
-            x = scipy.sparse.linalg.spsolve(A_csr, b)
-            
-            # 稀疏矩陣的點積運算
-            residual = np.max(np.abs(A_csr.dot(x) - b))
-            
-            return SolverResult(x=x, residual=residual, solve_time=time.time() - start_t)
-        except Exception as e:
-            return SolverResult(status="SINGULAR_OR_FAILURE", error_msg=str(e), solve_time=time.time() - start_t)
 
+        for i in range(max_iters):
+            # 每次疊代都要開一張全新的乾淨矩陣
+            A = scipy.sparse.lil_matrix((dim, dim), dtype=np.float64)
+            b = np.zeros(dim, dtype=np.float64)
+
+            # 把當下的猜測電壓塞進 ctx，讓某些需要偷看電壓的元件能拿到
+            ctx['current_x'] = x_guess 
+
+            # 2. 蓋章 (Stamp)
+            for el in self.circuit.elements:
+                extra_idx = self.extra_var_map.get(el)
+                
+                # 判斷是不是魔王級非線性元件
+                if getattr(el, 'is_nonlinear', False):
+                    # 非線性元件：需要看著現在的電壓 (x_guess) 來計算切線斜率
+                    el.stamp_nonlinear(A, b, x_guess, self.node_mgr.mapping)
+                else:
+                    # 傳統線性元件：閉著眼睛蓋章就好
+                    el.stamp(A, b, extra_idx=extra_idx, ctx=ctx)
+
+            # 3. 求解新的電壓
+            try:
+                A_csr = A.tocsr()
+                x_new = scipy.sparse.linalg.spsolve(A_csr, b)
+            except Exception as e:
+                return SolverResult(status="SINGULAR_OR_FAILURE", error_msg=str(e), solve_time=time.time() - start_t)
+
+            # 4. 檢查是否收斂 (Convergence Check)
+            # 判斷標準：新電壓跟舊電壓的差異，有沒有小於我們容許的誤差範圍
+            diff = np.abs(x_new - x_guess)
+            tolerance = reltol * np.maximum(np.abs(x_new), np.abs(x_guess)) + abstol
+            
+            if np.all(diff <= tolerance):
+                # 🟢 恭喜收斂！計算最終的 residual 並漂亮地下班
+                residual = np.max(np.abs(A_csr.dot(x_new) - b))
+                # print(f"[DEBUG] NR 收斂！花費了 {i+1} 次疊代。")
+                return SolverResult(x=x_new, residual=residual, solve_time=time.time() - start_t)
+
+            # 🔴 還沒收斂，把新算出來的電壓當作下一次的猜測值，再跑一圈！
+            x_guess = x_new
+
+        # 如果跑了 max_iters (預設 100 次) 都還沒跳出迴圈，代表發散了
+        return SolverResult(
+            status="NON_CONVERGENCE", 
+            error_msg=f"OP failed to converge after {max_iters} iterations.", 
+            solve_time=time.time() - start_t
+        )
     def solve_ac(self, f_start, f_stop, points, sweep_type='DEC'):
         dim = self._prepare_mna_structure()
         if dim == 0: return []
@@ -135,12 +167,16 @@ class Simulator:
             
         return sweep_results
         
-    def solve_tran(self, tstep, tstop):
+    def solve_tran(self, tstep, tstop, max_iters=100, reltol=1e-3, abstol=1e-6):
+        """
+        🚀 NextSPICE 非線性暫態求解器 (Transient Analysis with Newton-Raphson)
+        """
         dim = self._prepare_mna_structure()
         if dim == 0: return []
 
         results = []
         saved_dc = {}
+        # 1. 處理暫態電源的初始 DC 狀態
         for el in self.circuit.elements:
             if hasattr(el, '_eval_tran_voltage') and el.tran:
                 saved_dc[el] = el.dc_value
@@ -149,6 +185,7 @@ class Simulator:
                 saved_dc[el] = el.dc_value
                 el.dc_value = el._eval_tran_current(0.0)
 
+        # 2. 跑一次非線性的 Initial OP 取得起點
         try:
             op_res = self.solve_op(ctx=self._make_ctx(mode='op'))
         finally:
@@ -160,34 +197,69 @@ class Simulator:
         x_prev = op_res.x
         results.append({"time": 0.0, "x": x_prev.copy(), "status": "SUCCESS"})
         
+        # 初始化電容/電感的歷史電流/電壓
         for el in self.circuit.elements:
             if hasattr(el, 'update_history'):
                 el.update_history(x_prev, extra_idx=self.extra_var_map.get(el))
 
         t_points = np.arange(tstep, tstop + (tstep * 0.1), tstep)
         
+        # 3. 開始時間推進
         for t in t_points:
-            # 🚀 暫態迴圈裡，每個時間步長都要開新的 LIL 矩陣
-            A = scipy.sparse.lil_matrix((dim, dim), dtype=np.float64)
-            b = np.zeros(dim, dtype=np.float64)
+            # 🚀 暫態分析的魔法：拿上一個時間點的電壓當作這次 NR 的初始猜測！
+            # 因為時間連續，電壓不會突變，這樣可以極大減少疊代次數！
+            x_guess = x_prev.copy()
+            converged = False
             
-            ctx = self._make_ctx(mode='tran', t=t, dt=tstep)
-            for el in self.circuit.elements:
-                extra_idx = self.extra_var_map.get(el)
-                el.stamp(A, b, extra_idx=extra_idx, ctx=ctx)
+            # --- 進入 NR 疊代迴圈 ---
+            for i in range(max_iters):
+                A = scipy.sparse.lil_matrix((dim, dim), dtype=np.float64)
+                b = np.zeros(dim, dtype=np.float64)
                 
-            try:
-                A_csr = A.tocsr() # 🚀 壓縮
-                x_new = scipy.sparse.linalg.spsolve(A_csr, b) # 🚀 求解
-                results.append({"time": t, "x": x_new.copy(), "status": "SUCCESS"})
+                ctx = self._make_ctx(mode='tran', t=t, dt=tstep)
+                ctx['current_x'] = x_guess # 讓非線性元件看到目前的猜測電壓
                 
+                # 蓋章
                 for el in self.circuit.elements:
-                    if hasattr(el, 'update_history'):
-                        el.update_history(x_new, extra_idx=self.extra_var_map.get(el))
-            except Exception as e:
-                results.append({"time": t, "status": "FAILURE", "msg": str(e)})
+                    extra_idx = self.extra_var_map.get(el)
+                    if getattr(el, 'is_nonlinear', False):
+                        el.stamp_nonlinear(A, b, x_guess, self.node_mgr.mapping)
+                    else:
+                        el.stamp(A, b, extra_idx=extra_idx, ctx=ctx)
+                        
+                # 求解
+                try:
+                    A_csr = A.tocsr()
+                    x_new = scipy.sparse.linalg.spsolve(A_csr, b)
+                except Exception as e:
+                    results.append({"time": t, "status": "FAILURE", "msg": f"Matrix singular: {str(e)}"})
+                    return results
+
+                # 檢查收斂
+                diff = np.abs(x_new - x_guess)
+                tolerance = reltol * np.maximum(np.abs(x_new), np.abs(x_guess)) + abstol
+                
+                if np.all(diff <= tolerance):
+                    converged = True
+                    break # 🟢 收斂！跳出 NR 迴圈
+                    
+                x_guess = x_new
+                
+            # --- 離開 NR 疊代迴圈 ---
+            if not converged:
+                results.append({"time": t, "status": "FAILURE", "msg": f"Transient NR failed to converge at t={t*1000:.2f}ms"})
                 break
                 
+            # 記錄成功的結果
+            results.append({"time": t, "x": x_new.copy(), "status": "SUCCESS"})
+            
+            # 🚨 關鍵：只有在 "完全收斂" 的新電壓下，才能更新電容電感的歷史狀態！
+            for el in self.circuit.elements:
+                if hasattr(el, 'update_history'):
+                    el.update_history(x_new, extra_idx=self.extra_var_map.get(el))
+                    
+            x_prev = x_new
+            
         return results
 
     def get_full_report(self, solution_vec):

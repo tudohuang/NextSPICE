@@ -1,6 +1,6 @@
 from nextspice.engine.elements import (
     Resistor, Capacitor, Inductor, VoltageSource, CurrentSource,
-    VCVS, VCCS, CCVS, CCCS, MutualInductance
+    VCVS, VCCS, CCVS, CCCS, MutualInductance,Diode
 )
 
 class NodeManager:
@@ -41,6 +41,24 @@ class Circuit:
 
     def build_from_json(self, json_data):
         self.name = json_data.get("name", "Untitled")
+        raw_models = json_data.get("models", {})
+        self.models = {}
+        
+        if isinstance(raw_models, list):
+            # 如果是陣列，就把裡面的 name 抽出來當作 Key
+            for m in raw_models:
+                # 兼容不同寫法，可能是 m.get("name")，也可能是我們剛才寫的 { "1N4148": {...} } 被硬塞進 list
+                if isinstance(m, dict) and "name" in m:
+                    self.models[m["name"].upper()] = m
+                else:
+                    # 處理極端情況：如果 list 裡面裝的是 key-value
+                    for k, v in m.items():
+                        self.models[k.upper()] = v
+        else:
+            # 如果本來就是字典，直接拿來用
+            self.models = {k.upper(): v for k, v in raw_models.items()}
+
+
         errors = []
         deferred_elements = [] # 🚀 存放需要 Pass 2 處理的相依元件
 
@@ -72,8 +90,8 @@ class Circuit:
                     self._build_isource(el_data, p_node, n_node)
                 elif el_type in ["vcvs", "vccs"]:
                     self._build_voltage_controlled(el_data, p_node, n_node, el_type)
-                
-                # 若是 K, H, F 元件，推遲到 Pass 2 處理
+                elif el_type == "diode":  # 👈 對齊 parser 的 "type": "diode"
+                    self._build_diode(el_data, p_node, n_node)
                 elif el_type in ["mutual_inductance", "ccvs", "cccs"]:
                     deferred_elements.append(el_data)
                 
@@ -169,6 +187,39 @@ class Circuit:
             raise ValueError(f"Target inductors '{l1_name}' or '{l2_name}' not found for Mutual Inductance '{data['name']}'")
             
         self._add_element(MutualInductance(data["name"], l1_obj, l2_obj, data["value"]))
+
+    def _build_diode(self, data, p, n):
+        # 1. 準備預設參數
+        is_sat = 1e-14
+        n_factor = 1.0
+        
+        # 2. 看看這顆二極體有沒有指定 model
+        model_name = data.get("model")
+        if model_name:
+            # 防呆轉大寫，確保查表不會因為大小寫失誤
+            model_data = self.models.get(model_name.upper()) 
+            
+            if model_data and model_data.get("type", "").upper() == "D":
+                # 🚀 萬能相容：如果有 "params" 就用它，沒有的話，直接把 model_data 本身當作參數包！
+                params = model_data.get("params", model_data)
+                
+                # 🚀 兼容量產：把所有的 key 轉成大寫來對照，防止 Is, is, iS 這種鳥事
+                params_upper = {k.upper(): v for k, v in params.items()}
+                
+                if "IS" in params_upper: 
+                    is_sat = float(params_upper["IS"])
+                if "N" in params_upper: 
+                    n_factor = float(params_upper["N"])
+            else:
+                print(f"[WARN] Diode {data['name']} references unknown or invalid model '{model_name}'. Using defaults.")
+        # 3. 把參數傳給 Diode 實體 (記得去 elements.py 把 Diode 的 __init__ 加上這些參數接收)
+        self._add_element(Diode(
+            data["name"], 
+            self.node_mgr.mapping.get(p, 0), 
+            self.node_mgr.mapping.get(n, 0),
+            is_sat=is_sat,
+            n=n_factor
+        ))
 
     def get_voltage_report(self, x):
         """將 MNA 解向量轉換回人類可讀的節點電壓"""

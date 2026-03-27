@@ -6,12 +6,16 @@
     <title>NextSPICE Industrial Studio</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <style>
         :root {
+            /* 更現代、更接近 VS Code 的色系 */
             --bg-base: #1e1e1e;
             --bg-panel: #252526;
             --bg-sidebar: #181818;
             --bg-menu: #333333;
+            --bg-tab-active: #1e1e1e;
+            --bg-tab-inactive: #2d2d2d;
             --border: #3c3c3c;
             --accent: #007acc;
             --accent-hover: #005f9e;
@@ -21,6 +25,26 @@
             --console-err: #F48771;
             --console-success: #89D185;
             --console-warn: #CCA700;
+        }
+
+        /* 自訂漂亮捲軸 */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-base);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #424242;
+            border-radius: 5px;
+            border: 2px solid var(--bg-base);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4f4f4f;
         }
 
         body {
@@ -37,7 +61,7 @@
 
         /* Menu & Toolbar */
         .menu-bar {
-            height: 30px;
+            height: 35px;
             background-color: var(--bg-menu);
             display: flex;
             align-items: center;
@@ -45,17 +69,21 @@
             font-size: 13px;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            z-index: 10;
         }
 
         .menu-item {
             position: relative;
-            padding: 5px 10px;
+            padding: 6px 12px;
             cursor: pointer;
             user-select: none;
+            border-radius: 4px;
+            transition: 0.2s;
         }
 
         .menu-item:hover {
-            background-color: #505050;
+            background-color: rgba(255, 255, 255, 0.1);
             color: white;
         }
 
@@ -66,9 +94,11 @@
             left: 0;
             background-color: var(--bg-panel);
             border: 1px solid var(--border);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
             z-index: 1000;
-            min-width: 180px;
+            min-width: 200px;
+            border-radius: 4px;
+            padding: 5px 0;
         }
 
         .menu-item:hover .dropdown {
@@ -79,6 +109,7 @@
             padding: 8px 15px;
             display: flex;
             justify-content: space-between;
+            font-size: 13px;
         }
 
         .drop-item:hover {
@@ -96,13 +127,13 @@
         }
 
         .toolbar {
-            height: 36px;
+            height: 40px;
             background-color: var(--bg-panel);
             display: flex;
             align-items: center;
-            padding: 0 10px;
+            padding: 0 15px;
             border-bottom: 1px solid var(--border);
-            gap: 8px;
+            gap: 10px;
             flex-shrink: 0;
         }
 
@@ -110,17 +141,19 @@
             background-color: transparent;
             color: var(--text-main);
             border: 1px solid transparent;
-            padding: 4px 12px;
-            font-size: 12px;
+            padding: 6px 12px;
+            font-size: 13px;
             cursor: pointer;
             outline: none;
             display: flex;
             align-items: center;
-            user-select: none;
+            gap: 6px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
         }
 
         .tool-btn:hover {
-            background-color: #333333;
+            background-color: rgba(255, 255, 255, 0.05);
             border: 1px solid #555555;
         }
 
@@ -132,9 +165,10 @@
 
         .tool-btn.primary:hover {
             background-color: var(--accent-hover);
+            box-shadow: 0 0 8px rgba(0, 122, 204, 0.4);
         }
 
-        /* Layout & Panels */
+        /* Layout */
         .main-container {
             display: flex;
             flex: 1;
@@ -147,18 +181,19 @@
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            padding: 6px 15px;
+            padding: 8px 15px;
             border-bottom: 1px solid var(--border);
             user-select: none;
             flex-shrink: 0;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            font-weight: 600;
         }
 
-        /* Sidebar Workspace */
+        /* Sidebar */
         .sidebar {
-            width: 220px;
+            width: 240px;
             background-color: var(--bg-sidebar);
             display: flex;
             flex-direction: column;
@@ -169,21 +204,22 @@
         #file-list {
             flex: 1;
             overflow-y: auto;
-            padding: 5px 0;
+            padding: 10px 0;
             margin: 0;
             list-style: none;
             font-size: 13px;
         }
 
         .file-item {
-            padding: 4px 15px;
+            padding: 6px 15px 6px 20px;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            transition: 0.1s;
         }
 
         .file-item:hover {
@@ -193,28 +229,75 @@
         .file-item.active {
             background-color: #37373d;
             color: white;
-            border-left: 2px solid var(--accent);
-            padding-left: 13px;
+            border-left: 3px solid var(--accent);
+            padding-left: 17px;
         }
 
         .file-icon {
-            color: #fbc531;
-            font-weight: bold;
+            color: #519aba;
+            font-size: 14px;
         }
 
-        /* Center Column (Editor + Term) */
+        /* VS Code Blue for files */
+
+        /* Center Column */
         .center-col {
-            width: 40%;
+            width: 45%;
             display: flex;
             flex-direction: column;
             border-right: 1px solid var(--border);
             min-width: 0;
         }
 
+        /* 🚀 Tabs System */
+        .tabs-container {
+            display: flex;
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            flex-shrink: 0;
+        }
+
+        .tab {
+            padding: 8px 15px;
+            font-size: 13px;
+            cursor: pointer;
+            border-right: 1px solid var(--border);
+            background-color: var(--bg-tab-inactive);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 100px;
+        }
+
+        .tab:hover {
+            background-color: var(--bg-base);
+        }
+
+        .tab.active {
+            background-color: var(--bg-base);
+            color: #fff;
+            border-top: 2px solid var(--accent);
+        }
+
+        .tab-close {
+            margin-left: auto;
+            font-size: 10px;
+            border-radius: 3px;
+            padding: 2px 4px;
+        }
+
+        .tab-close:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: #F48771;
+        }
+
         #editor-container {
             flex: 1;
             min-height: 0;
             position: relative;
+            background-color: var(--bg-base);
         }
 
         #editor {
@@ -223,7 +306,7 @@
         }
 
         .terminal-wrapper {
-            height: 200px;
+            height: 220px;
             display: flex;
             flex-direction: column;
             border-top: 1px solid var(--border);
@@ -233,26 +316,25 @@
 
         #console-output {
             flex: 1;
-            padding: 8px 15px 0 15px;
-            font-family: 'Consolas', monospace;
-            font-size: 12px;
+            padding: 10px 15px 0 15px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
             overflow-y: auto;
             color: var(--text-main);
-            line-height: 1.6;
-            user-select: text;
+            line-height: 1.5;
         }
 
         .term-input-row {
             display: flex;
-            padding: 5px 15px 10px 15px;
+            padding: 8px 15px 12px 15px;
             align-items: center;
             font-family: 'Consolas', monospace;
             font-size: 13px;
         }
 
         .prompt {
-            color: var(--console-info);
-            margin-right: 8px;
+            color: var(--console-success);
+            margin-right: 10px;
             font-weight: bold;
         }
 
@@ -266,7 +348,7 @@
             outline: none;
         }
 
-        /* Right Column (Plotly & Data Table) */
+        /* Right Column */
         .right-col {
             flex: 1;
             display: flex;
@@ -281,9 +363,10 @@
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: var(--bg-base);
+            background-color: #1a1a1a;
         }
 
+        /* 稍微加深圖表背景 */
         #plot-area {
             position: absolute;
             top: 0;
@@ -299,9 +382,18 @@
             color: var(--text-muted);
             font-size: 14px;
             user-select: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
         }
 
-        /* 🚀 專屬工業級 OP 數據表格樣式 */
+        .empty-state i {
+            font-size: 40px;
+            color: #3c3c3c;
+        }
+
+        /* Data Grid */
         .table-container {
             width: 100%;
             height: 100%;
@@ -317,22 +409,24 @@
             font-family: 'Consolas', monospace;
             font-size: 13px;
             color: #cccccc;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
 
         .op-table th {
-            background-color: var(--bg-panel);
-            color: var(--accent);
+            background-color: #2d2d2d;
+            color: #4FC1FF;
             text-align: left;
-            padding: 10px 15px;
-            border-bottom: 2px solid var(--border);
+            padding: 12px 15px;
+            border-bottom: 2px solid var(--accent);
             position: sticky;
             top: 0;
-            font-weight: normal;
+            font-weight: 600;
+            letter-spacing: 0.5px;
         }
 
         .op-table td {
-            padding: 8px 15px;
-            border-bottom: 1px solid #2a2a2a;
+            padding: 10px 15px;
+            border-bottom: 1px solid #333;
         }
 
         .op-table tr:hover {
@@ -341,25 +435,49 @@
 
         .val-positive {
             color: var(--console-success);
+            font-weight: bold;
         }
 
         .val-negative {
             color: var(--console-err);
+            font-weight: bold;
         }
 
         .val-zero {
             color: var(--text-muted);
         }
 
+        /* Status Bar */
         .status-bar {
-            height: 22px;
+            height: 24px;
             background-color: var(--accent);
             display: flex;
             align-items: center;
-            padding: 0 10px;
-            font-size: 11px;
+            justify-content: space-between;
+            padding: 0 15px;
+            font-size: 12px;
             color: #ffffff;
             flex-shrink: 0;
+            font-weight: 500;
+        }
+
+        .status-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            padding: 0 5px;
+            border-radius: 3px;
+        }
+
+        .status-item:hover {
+            background-color: rgba(255, 255, 255, 0.2);
         }
 
         #folder-input {
@@ -370,23 +488,30 @@
 
 <body>
     <input type="file" id="folder-input" webkitdirectory directory multiple onchange="loadWorkspace(event)">
+
     <div class="menu-bar">
         <div class="menu-item">File
             <div class="dropdown">
-                <div class="drop-item" onclick="document.getElementById('folder-input').click()">Open Workspace... <span
+                <div class="drop-item" onclick="createNewFile()"><i class="fa-solid fa-file-circle-plus"></i> New
+                    File... <span class="shortcut">Ctrl+N</span></div>
+
+                <div class="drop-item" onclick="document.getElementById('folder-input').click()"><i
+                        class="fa-regular fa-folder-open"></i> Open Workspace... <span class="shortcut"></span></div>
+                <div class="drop-item" onclick="runSimulation()"><i class="fa-solid fa-play"></i> Run Simulation <span
+                        class="shortcut">F5</span></div>
+                <div class="drop-item" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> Export CSV <span
                         class="shortcut"></span></div>
-                <div class="drop-item" onclick="runSimulation()">Run Simulation <span class="shortcut">F5</span></div>
-                <div class="drop-item" onclick="exportCSV()">Export CSV <span class="shortcut"></span></div>
             </div>
         </div>
         <div class="menu-item">Edit
             <div class="dropdown">
-                <div class="drop-item" onclick="if(window.editor) window.editor.setValue('')">Clear Editor</div>
-                <div class="drop-item" onclick="formatCode()">Format Code <span class="shortcut">Alt+Shift+F</span>
-                </div>
+                <div class="drop-item" onclick="if(window.editor) window.editor.setValue('')"><i
+                        class="fa-solid fa-eraser"></i> Clear Editor</div>
+                <div class="drop-item" onclick="formatCode()"><i class="fa-solid fa-wand-magic-sparkles"></i> Format
+                    Code <span class="shortcut">Alt+Shift+F</span></div>
             </div>
         </div>
-        <div class="menu-item">Terminal
+        <div class="menu-item">View
             <div class="dropdown">
                 <div class="drop-item" onclick="document.getElementById('console-output').innerHTML=''">Clear Console
                 </div>
@@ -395,29 +520,43 @@
     </div>
 
     <div class="toolbar">
-        <button class="tool-btn primary" onclick="runSimulation()">Run Simulation</button>
-        <button class="tool-btn" onclick="formatCode()">✨ Format</button>
-        <button class="tool-btn" onclick="exportCSV()">Export CSV</button>
+        <button class="tool-btn primary" onclick="runSimulation()"><i class="fa-solid fa-play"></i> Run
+            Simulation</button>
+        <button class="tool-btn" onclick="formatCode()"><i class="fa-solid fa-align-left"></i> Format</button>
+        <button class="tool-btn" onclick="exportCSV()"><i class="fa-solid fa-download"></i> Export Data</button>
+        <div style="flex:1;"></div>
+        <span style="color: var(--text-muted); font-size: 12px;"><i class="fa-solid fa-microchip"></i> NextSPICE Engine
+            v1.4</span>
     </div>
 
     <div class="main-container">
         <div class="sidebar">
-            <div class="panel-header">EXPLORER <span style="cursor:pointer;"
-                    onclick="document.getElementById('folder-input').click()" title="Open Folder">📁</span></div>
+            <div class="panel-header">
+                <span>EXPLORER</span>
+                <span style="cursor:pointer;" onclick="document.getElementById('folder-input').click()"
+                    title="Open Folder"><i class="fa-solid fa-folder-plus"></i></span>
+            </div>
             <ul id="file-list">
-                <li style="padding: 10px; color:var(--text-muted); font-size:12px; text-align:center;">Click 📁 to open
-                    folder</li>
+                <li
+                    style="padding: 20px; color:var(--text-muted); font-size:12px; text-align:center; line-height: 1.6;">
+                    <i class="fa-regular fa-folder-open" style="font-size: 24px; margin-bottom: 10px;"></i><br>
+                    Click the icon above to open a folder.
+                </li>
             </ul>
         </div>
 
         <div class="center-col">
-            <div class="panel-header" id="current-file-name">untitled.cir</div>
+            <div class="tabs-container" id="tabs-bar">
+                <div class="tab active" id="tab-untitled"><i class="fa-solid fa-file-lines file-icon"></i> untitled.cir
+                </div>
+            </div>
+
             <div id="editor-container">
                 <div id="editor"></div>
             </div>
 
             <div class="terminal-wrapper">
-                <div class="panel-header">Terminal Output</div>
+                <div class="panel-header"><span><i class="fa-solid fa-terminal"></i> Terminal</span></div>
                 <div id="console-output"><span style="color: var(--console-info);">[INFO] NextSPICE v1.4 Engine
                         Ready.</span><br></div>
                 <div class="term-input-row">
@@ -429,40 +568,82 @@
         </div>
 
         <div class="right-col">
-            <div class="panel-header" id="viewer-header">Waveform Viewer</div>
+            <div class="panel-header"><span id="viewer-header"><i class="fa-solid fa-chart-line"></i> Waveform
+                    Viewer</span></div>
             <div class="plot-wrapper">
                 <div id="plot-area">
-                    <div class="empty-state">No simulation data. Click "Run Simulation".</div>
+                    <div class="empty-state">
+                        <i class="fa-solid fa-chart-area"></i>
+                        No simulation data. Click "Run Simulation".
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="status-bar"><span id="status-text">Ready</span></div>
+    <div class="status-bar">
+        <div class="status-group">
+            <span id="status-text"><i class="fa-solid fa-check-circle"></i> Ready</span>
+        </div>
+        <div class="status-group">
+            <div class="status-item" id="cursor-pos">Ln 1, Col 1</div>
+            <div class="status-item">UTF-8</div>
+            <div class="status-item">SPICE</div>
+        </div>
+    </div>
 
     <script>
-        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-        require(['vs/editor/editor.main'], function () {
-            window.editor = monaco.editor.create(document.getElementById('editor'), {
-                value: "* Try an OP Analysis!\nV1 IN 0 DC 12\nR1 IN MID 1k\nR2 MID 0 2k\n.OP\n.END",
-                language: 'ini', theme: 'vs-dark', automaticLayout: true, fontSize: 13, fontFamily: "'Consolas', monospace", minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 10, bottom: 10 }
-            });
-            window.editor.addCommand(monaco.KeyCode.F5, function () { runSimulation(); });
-            window.editor.addCommand(monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, function () { formatCode(); });
-        });
-
+        // --- 核心變數 ---
         const consoleOut = document.getElementById('console-output');
         const statusText = document.getElementById('status-text');
         const viewerHeader = document.getElementById('viewer-header');
-        let workspaceFiles = {};
+        const cursorPos = document.getElementById('cursor-pos');
 
+        let workspaceFiles = { "untitled.cir": "* Try an OP Analysis!\nV1 IN 0 DC 12\nR1 IN MID 1k\nR2 MID 0 2k\n.OP\n.END" };
+        let activeFile = "untitled.cir";
+        let openTabs = ["untitled.cir"];
+
+        // --- 編輯器初始化 ---
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+        require(['vs/editor/editor.main'], function () {
+            window.editor = monaco.editor.create(document.getElementById('editor'), {
+                value: workspaceFiles[activeFile],
+                language: 'ini',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                fontSize: 14,
+                fontFamily: "'Consolas', 'Courier New', monospace",
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                padding: { top: 15, bottom: 15 },
+                renderLineHighlight: "all" // 高亮整行，更有質感
+            });
+
+            // 快捷鍵綁定
+            window.editor.addCommand(monaco.KeyCode.F5, function () { runSimulation(); });
+            window.editor.addCommand(monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, function () { formatCode(); });
+
+            // 游標位置追蹤
+            window.editor.onDidChangeCursorPosition((e) => {
+                cursorPos.innerText = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+            });
+
+            // 檔案內容同步
+            window.editor.onDidChangeModelContent(() => {
+                workspaceFiles[activeFile] = window.editor.getValue();
+            });
+        });
+
+        // --- UI 輔助函數 ---
         function appendLog(msg, type = "info") {
             let color = "var(--text-main)";
-            if (type === "error") color = "var(--console-err)";
-            else if (type === "warn") color = "var(--console-warn)";
-            else if (type === "success") color = "var(--console-success)";
-            else if (type === "system") color = "var(--console-info)";
-            consoleOut.innerHTML += `<span style="color:${color};">${msg}</span><br>`;
+            let icon = "";
+            if (type === "error") { color = "var(--console-err)"; icon = "<i class='fa-solid fa-xmark'></i> "; }
+            else if (type === "warn") { color = "var(--console-warn)"; icon = "<i class='fa-solid fa-triangle-exclamation'></i> "; }
+            else if (type === "success") { color = "var(--console-success)"; icon = "<i class='fa-solid fa-check'></i> "; }
+            else if (type === "system") { color = "var(--console-info)"; }
+
+            consoleOut.innerHTML += `<span style="color:${color};">${icon}${msg}</span><br>`;
             consoleOut.scrollTop = consoleOut.scrollHeight;
         }
 
@@ -476,51 +657,97 @@
                 switch (args[0].toLowerCase()) {
                     case 'clear': case 'cls': consoleOut.innerHTML = ''; break;
                     case 'run': runSimulation(); break;
-                    case 'help': appendLog("Commands: run, clear, help"); break;
                     default: appendLog(`Term: '${args[0]}' not recognized.`, "error");
                 }
             }
         }
 
+        // --- 📂 檔案與頁籤系統 ---
         function loadWorkspace(event) {
             const files = event.target.files;
             if (files.length === 0) return;
             const fileListUI = document.getElementById('file-list');
             fileListUI.innerHTML = '';
-            workspaceFiles = {};
+            workspaceFiles = {}; openTabs = []; document.getElementById('tabs-bar').innerHTML = '';
+
             appendLog(`[SYS] Loaded workspace: ${files.length} files.`, "system");
-            Array.from(files).forEach((file, index) => {
+
+            let firstFile = null;
+            Array.from(files).forEach((file) => {
                 if (file.name.endsWith('.cir') || file.name.endsWith('.sp') || file.name.endsWith('.txt')) {
+                    if (!firstFile) firstFile = file.name;
                     const reader = new FileReader();
                     reader.onload = (e) => {
                         workspaceFiles[file.name] = e.target.result;
                         const li = document.createElement('li');
                         li.className = 'file-item';
-                        li.innerHTML = `<span class="file-icon">⚡</span> ${file.name}`;
-                        li.onclick = () => openFile(file.name, li);
+                        li.id = `sidebar-item-${file.name}`;
+                        li.innerHTML = `<i class="fa-solid fa-file-code file-icon"></i> ${file.name}`;
+                        li.onclick = () => openFile(file.name);
                         fileListUI.appendChild(li);
-                        if (index === 0) openFile(file.name, li);
+
+                        if (file.name === firstFile) openFile(file.name);
                     };
                     reader.readAsText(file);
                 }
             });
         }
 
-        function openFile(filename, element) {
+        function openFile(filename) {
+            // 更新 Sidebar 樣式
             document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
-            if (element) element.classList.add('active');
-            if (window.editor && workspaceFiles[filename]) {
+            const sidebarItem = document.getElementById(`sidebar-item-${filename}`);
+            if (sidebarItem) sidebarItem.classList.add('active');
+
+            // 處理 Tab
+            if (!openTabs.includes(filename)) {
+                openTabs.push(filename);
+                renderTabs();
+            }
+            activeFile = filename;
+            renderTabs();
+
+            // 更新 Editor
+            if (window.editor && workspaceFiles[filename] !== undefined) {
                 window.editor.setValue(workspaceFiles[filename]);
-                document.getElementById('current-file-name').innerText = filename;
             }
         }
 
-        // --- 🚀 智慧渲染引擎 (自動判斷畫圖或畫表) ---
+        function renderTabs() {
+            const tabsBar = document.getElementById('tabs-bar');
+            tabsBar.innerHTML = '';
+            openTabs.forEach(file => {
+                const tab = document.createElement('div');
+                tab.className = `tab ${file === activeFile ? 'active' : ''}`;
+                tab.innerHTML = `<i class="fa-solid fa-file-code" style="color:#519aba"></i> ${file} 
+                                 <span class="tab-close" onclick="closeTab(event, '${file}')"><i class="fa-solid fa-xmark"></i></span>`;
+                tab.onclick = () => openFile(file);
+                tabsBar.appendChild(tab);
+            });
+        }
+
+        function closeTab(event, filename) {
+            event.stopPropagation(); // 防止觸發 openFile
+            openTabs = openTabs.filter(f => f !== filename);
+            if (openTabs.length === 0) {
+                window.editor.setValue("");
+                activeFile = null;
+                renderTabs();
+                return;
+            }
+            if (activeFile === filename) openFile(openTabs[0]); // 切換到第一個
+            else renderTabs();
+        }
+
+        // --- 🚀 核心模擬引擎呼叫 ---
         async function runSimulation() {
             if (!window.editor) return;
             const netlist = window.editor.getValue();
-            statusText.innerText = "Simulating...";
-            appendLog("[SYS] Executing simulation...", "system");
+
+            // UI 更新：載入中狀態
+            statusText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Simulating...`;
+            document.getElementById('status-text').parentElement.parentElement.style.backgroundColor = "#d7ba7d"; // 變黃色
+            appendLog("Executing simulation...", "system");
 
             try {
                 const response = await fetch('/api/simulate', {
@@ -531,71 +758,66 @@
 
                 const result = await response.json();
 
+                // 恢復綠色 Ready 狀態
+                document.getElementById('status-text').parentElement.parentElement.style.backgroundColor = "var(--accent)";
+
                 if (result.logs) {
                     result.logs.forEach(log => {
                         let cleanLog = log.replace(/[❌⚠️✓🚀]/g, '').trim();
-                        if (cleanLog.includes("ERROR") || cleanLog.includes("失敗")) appendLog("[ERR] " + cleanLog, "error");
-                        else if (cleanLog.includes("完成") || cleanLog.includes("SUCCESS")) appendLog("[OK] " + cleanLog, "success");
+                        if (cleanLog.includes("ERROR") || cleanLog.includes("失敗")) appendLog(cleanLog, "error");
+                        else if (cleanLog.includes("完成") || cleanLog.includes("SUCCESS")) appendLog(cleanLog, "success");
                         else if (cleanLog.includes("---")) appendLog("\n" + cleanLog, "system");
                         else appendLog("      " + cleanLog);
                     });
                 }
 
-                // 🌟 核心判斷：有圖就畫圖，沒圖有 OP 數據就畫表格！
                 if (result.status === "success" && result.plots && result.plots.length > 0) {
-                    viewerHeader.innerText = "Waveform Viewer";
+                    viewerHeader.innerHTML = `<i class="fa-solid fa-chart-line"></i> Waveform Viewer`;
                     drawPlot(result.plots, result.layout);
-                    statusText.innerText = "Simulation Complete";
+                    statusText.innerHTML = `<i class="fa-solid fa-check"></i> Simulation Complete`;
                 }
                 else if (result.status === "success" && result.op_results && Object.keys(result.op_results).length > 0) {
-                    viewerHeader.innerText = "Operating Point (DC Analysis) Data";
+                    viewerHeader.innerHTML = `<i class="fa-solid fa-table"></i> Operating Point (DC Analysis)`;
                     drawDataGrid(result.op_results);
-                    statusText.innerText = "OP Analysis Complete";
+                    statusText.innerHTML = `<i class="fa-solid fa-check"></i> OP Analysis Complete`;
                 }
                 else {
-                    statusText.innerText = "Ready";
-                    viewerHeader.innerText = "Waveform Viewer";
+                    statusText.innerHTML = `<i class="fa-solid fa-check"></i> Ready`;
                     const plotArea = document.getElementById('plot-area');
                     Plotly.purge(plotArea);
-                    plotArea.innerHTML = '<div class="empty-state">Simulation finished with no graphical or OP data.</div>';
+                    plotArea.innerHTML = '<div class="empty-state"><i class="fa-solid fa-ghost"></i> Simulation finished with no graphical or OP data.</div>';
                     window.lastPlotData = null;
                 }
 
             } catch (err) {
-                appendLog(`[ERR] Communication failed.`, "error");
-                statusText.innerText = "Error";
+                appendLog(`Communication failed.`, "error");
+                statusText.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Error`;
+                document.getElementById('status-text').parentElement.parentElement.style.backgroundColor = "var(--console-err)";
             }
         }
 
-        // 🌟 新增：繪製極具科技感的數據表
+        // --- 📊 表格與圖表渲染 ---
         function drawDataGrid(opData) {
             const plotArea = document.getElementById('plot-area');
-            Plotly.purge(plotArea); // 徹底殺掉 Plotly，把畫布讓給表格
-            window.lastPlotData = null; // 清空舊的畫圖資料
+            Plotly.purge(plotArea);
+            window.lastPlotData = null;
 
             let html = `<div class="table-container"><table class="op-table">
                 <thead><tr>
-                    <th>Node / Component Branch</th>
-                    <th>Value (Voltage / Current)</th>
+                    <th><i class="fa-solid fa-code-branch"></i> Node / Branch</th>
+                    <th><i class="fa-solid fa-bolt"></i> Value</th>
                 </tr></thead><tbody>`;
 
-            // 將物件拆解成陣列並排序，讓 V 開頭的在前面，I 開頭的在後面
             const entries = Object.entries(opData).sort((a, b) => a[0].localeCompare(b[0]));
-
             entries.forEach(([key, val]) => {
-                let unit = key.startsWith('I(') ? 'A' : 'V';
-
-                // 判斷正負值來上色
+                let unit = key.startsWith('I(') ? 'A' : (key.startsWith('P(') ? 'W' : 'V');
                 let valClass = 'val-zero';
                 if (val > 1e-12) valClass = 'val-positive';
                 else if (val < -1e-12) valClass = 'val-negative';
 
-                // 工業標準的科學記號格式 (5位小數)
-                let formattedVal = val.toExponential(5);
-
                 html += `<tr>
-                    <td>${key}</td>
-                    <td class="${valClass}">${formattedVal} <span style="color:#666; font-size:11px; margin-left:5px;">${unit}</span></td>
+                    <td style="font-weight:bold; color:#dcdcaa;">${key}</td>
+                    <td class="${valClass}">${val.toExponential(5)} <span style="color:#666; font-size:11px;">${unit}</span></td>
                 </tr>`;
             });
 
@@ -605,41 +827,43 @@
 
         function drawPlot(plotData, layoutConfig) {
             const plotArea = document.getElementById('plot-area');
-
-            // 💥 修復關鍵：除了 Purge，還要物理性清空裡面的所有 HTML (殺掉資料表)
             Plotly.purge(plotArea);
             plotArea.innerHTML = "";
             plotArea.style.display = 'block';
 
-            const traces = plotData.map(p => ({
+            // 霓虹科技感配色
+            const colors = ['#00FFCC', '#FF3366', '#FFCC00', '#CC66FF', '#3399FF'];
+
+            const traces = plotData.map((p, i) => ({
                 x: p.x, y: p.y, name: p.name, mode: 'lines',
-                line: { dash: p.type === 'dash' ? 'dash' : 'solid', width: 1.5, shape: 'spline', smoothing: 0.3 }
+                line: {
+                    color: colors[i % colors.length],
+                    dash: p.type === 'dash' ? 'dash' : 'solid',
+                    width: 2,
+                    shape: 'spline', smoothing: 0.3
+                }
             }));
 
-            traces[0].line.color = '#00FF00';
-            if (traces[1]) traces[1].line.color = '#FF00FF';
-            if (traces[2]) traces[2].line.color = '#00FFFF';
-
             const layout = {
-                title: { text: layoutConfig.title || 'Waveform Viewer', font: { size: 14, color: '#cccccc' }, x: 0.02, y: 0.98 },
+                title: { text: layoutConfig.title || 'Waveform', font: { size: 14, color: '#e0e0e0', family: 'Segoe UI' }, x: 0.02, y: 0.95 },
                 paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
                 font: { color: '#aaaaaa', family: 'Consolas, monospace', size: 11 },
-                xaxis: { title: { text: layoutConfig.xaxis || 'X Axis', font: { size: 12 } }, gridcolor: '#2a2a2a', zerolinecolor: '#555555', type: layoutConfig.is_ac ? 'log' : 'linear', showline: true, linecolor: '#555555', mirror: true },
-                yaxis: { title: { text: layoutConfig.yaxis || 'Y Axis', font: { size: 12 } }, gridcolor: '#2a2a2a', zerolinecolor: '#555555', showline: true, linecolor: '#555555', mirror: true },
-                hovermode: 'x unified', hoverlabel: { bgcolor: '#252526', font: { family: 'Consolas' } },
-                margin: { t: 40, l: 50, r: 20, b: 40 },
-                legend: { font: { size: 11, color: '#cccccc' }, orientation: 'h', y: -0.15, x: 0, bgcolor: 'rgba(0,0,0,0)' },
+                xaxis: { title: { text: layoutConfig.xaxis || 'Time (s)', font: { size: 12 } }, gridcolor: '#333333', zerolinecolor: '#666666', type: layoutConfig.is_ac ? 'log' : 'linear', showline: true, linecolor: '#666666', mirror: true },
+                yaxis: { title: { text: layoutConfig.yaxis || 'Voltage (V)', font: { size: 12 } }, gridcolor: '#333333', zerolinecolor: '#666666', showline: true, linecolor: '#666666', mirror: true },
+                hovermode: 'x unified', hoverlabel: { bgcolor: '#1e1e1e', bordercolor: '#333', font: { family: 'Consolas' } },
+                margin: { t: 50, l: 60, r: 30, b: 50 },
+                legend: { font: { size: 12, color: '#e0e0e0' }, orientation: 'h', y: -0.18, x: 0, bgcolor: 'rgba(0,0,0,0)' },
                 autosize: true
             };
 
-            Plotly.newPlot(plotArea, traces, layout, { responsive: true, displaylogo: false });
+            Plotly.newPlot(plotArea, traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d'] });
             window.lastPlotData = plotData;
             window.lastXLabel = layoutConfig.xaxis;
         }
 
         function exportCSV() {
-            if (!window.lastPlotData) { appendLog("[ERR] No plot data to export.", "error"); return; }
-            appendLog("[SYS] Generating CSV...", "system");
+            if (!window.lastPlotData) { appendLog("No plot data to export.", "error"); return; }
+            appendLog("Generating CSV...", "system");
             try {
                 let csv = (window.lastXLabel || "X_Axis") + "," + window.lastPlotData.map(t => t.name).join(",") + "\n";
                 let len = window.lastPlotData[0].x.length;
@@ -648,17 +872,14 @@
                 }
                 const a = document.createElement("a");
                 a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-                a.download = "Simulation_Export.csv";
+                a.download = "NextSPICE_Export.csv";
                 a.click();
-                appendLog("[OK] CSV Downloaded.", "success");
+                appendLog("CSV Downloaded.", "success");
             } catch (err) {
-                appendLog(`[ERR] Export Failed: ${err.message}`, "error");
+                appendLog(`Export Failed: ${err.message}`, "error");
             }
         }
-    </script>
 
-    <script>
-        // 🚀 修正後的 formatCode 函數
         async function formatCode() {
             if (!window.editor) return;
             try {
@@ -668,16 +889,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ code: code })
                 });
-
                 if (!response.ok) throw new Error("Server Error");
-
                 const result = await response.json();
                 if (result.code) {
                     window.editor.setValue(result.code);
-                    appendLog("[OK] Code Formatted.", "success");
+                    appendLog("Code Formatted.", "success");
                 }
             } catch (err) {
-                appendLog(`[ERR] Format failed: ${err.message}`, "error");
+                appendLog(`Format failed: ${err.message}`, "error");
             }
         }
     </script>

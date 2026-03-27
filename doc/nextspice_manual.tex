@@ -1,0 +1,1272 @@
+% ============================================================
+%  NextSPICE 技術說明書
+%  使用 XeLaTeX + xeCJK 編譯
+%  編譯指令: xelatex nextspice_manual.tex
+% ============================================================
+\documentclass[12pt,a4paper]{article}
+
+% ---------- 字型與中文支援 ----------
+\usepackage{xeCJK}
+\usepackage{fontspec}
+
+% 中文字型（apt install fonts-noto-cjk）
+\setCJKmainfont{Noto Serif CJK TC}
+\setCJKsansfont{Noto Sans CJK TC}
+\setCJKmonofont{Noto Sans Mono CJK TC}
+% 英文字型（TeX Live 內建）
+\setmainfont{Latin Modern Roman}
+\setmonofont{Latin Modern Mono}
+
+% ---------- 套件 ----------
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{array}
+\usepackage{multirow}
+
+% ---------- 程式碼樣式 ----------
+\definecolor{codebg}{RGB}{245,245,245}
+\definecolor{codegreen}{RGB}{0,128,0}
+\definecolor{codegray}{RGB}{128,128,128}
+\definecolor{codeblue}{RGB}{0,0,180}
+\definecolor{codepurple}{RGB}{128,0,128}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  breaklines=true,
+  keywordstyle=\color{codeblue}\bfseries,
+  commentstyle=\color{codegreen}\itshape,
+  stringstyle=\color{codepurple},
+  numbers=left,
+  numberstyle=\tiny\color{codegray},
+  tabsize=4,
+  showstringspaces=false,
+  captionpos=b,
+  xleftmargin=1.5em,
+  framexleftmargin=1em,
+}
+
+\lstdefinelanguage{SPICE}{
+  morekeywords={.OP,.AC,.DC,.TRAN,.SENS,.STEP,.MEASURE,.SUBCKT,.ENDS,.PARAM,.MODEL,.PRINT,.PLOT,.OPTIONS,.END,DEC,LIN,OCT,SIN,PULSE,PWL,TRIG,TARG,VAL,RISE,FALL,CROSS,PARAM,DC,AC},
+  morecomment=[l]{*},
+  morestring=[b]",
+  sensitive=false,
+}
+
+\lstdefinelanguage{PythonSPICE}{
+  language=Python,
+  morekeywords={self,def,class,import,from,return,if,elif,else,for,in,try,except,finally,None,True,False,raise,not,and,or,is,has,with,as,break,continue,pass,lambda,yield},
+}
+
+% ---------- 頁首頁尾 ----------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small NextSPICE 技術說明書}
+\fancyhead[R]{\small v0.5}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---------- 標題格式 ----------
+\titleformat{\section}{\Large\bfseries}{第\,\thesection\,章}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+% ---------- 超連結設定 ----------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  urlcolor=blue!60!black,
+  citecolor=green!50!black,
+  bookmarks=true,
+  pdfauthor={NextSPICE Team},
+  pdftitle={NextSPICE 技術說明書},
+}
+
+% ============================================================
+\begin{document}
+
+% ---------- 封面 ----------
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries NextSPICE}\\[0.5cm]
+{\LARGE 電路模擬引擎技術說明書}\\[2cm]
+{\large 版本 0.5 --- Subcircuit Supported Edition}\\[1cm]
+{\large\today}\\[3cm]
+{\large
+涵蓋系統架構、編譯器原理、數學推導、\\
+模擬演算法與完整程式碼流程分析
+}
+\vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{系統總覽}
+% ============================================================
+
+\subsection{NextSPICE 簡介}
+
+NextSPICE 是一套以 Python 撰寫的開源類比電路模擬引擎，實作了業界標準 SPICE（Simulation Program with Integrated Circuit Emphasis）的核心功能子集。系統支援以下五種分析模式：
+
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{直流工作點分析}（\texttt{.OP}）--- 求解電路的穩態直流解。
+  \item \textbf{交流小訊號分析}（\texttt{.AC}）--- 在頻域中掃描阻抗響應。
+  \item \textbf{直流掃描分析}（\texttt{.DC}）--- 對某一獨立源進行參數掃描。
+  \item \textbf{暫態分析}（\texttt{.TRAN}）--- 以時域數值積分模擬動態行為。
+  \item \textbf{靈敏度分析}（\texttt{.SENS}）--- 以中央差分法求各元件對增益的靈敏度。
+\end{enumerate}
+
+\subsection{系統架構分層}
+
+NextSPICE 採用四層式架構，各層職責分明：
+
+\begin{center}
+\begin{tabular}{|c|l|l|}
+\hline
+\textbf{層級} & \textbf{名稱} & \textbf{職責} \\
+\hline
+1 & 前端層（Frontend） & FastAPI Web 伺服器，提供 REST API \\
+2 & 編譯層（Compiler） & 網表解析、參數展開、驗證、子電路展平 \\
+3 & 引擎層（Engine） & 元件模型定義、矩陣代數運算 \\
+4 & 執行層（Runtime） & 電路建構、求解器、分析排程、量測引擎 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent 資料流向為：
+
+\begin{center}
+\fbox{網表文字} $\xrightarrow{\text{Compiler}}$
+\fbox{JSON 電路描述} $\xrightarrow{\text{Runtime Builder}}$
+\fbox{Python 元件物件} $\xrightarrow{\text{Solver}}$
+\fbox{模擬結果}
+\end{center}
+
+\subsection{原始碼檔案總覽}
+
+\begin{longtable}{lll}
+\toprule
+\textbf{目錄} & \textbf{檔案} & \textbf{功能說明} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{目錄} & \textbf{檔案} & \textbf{功能說明} \\
+\midrule
+\endhead
+\texttt{compiler/} & \texttt{frontend.py}  & 編譯器主協調器，子電路展平 \\
+                    & \texttt{preprocess.py} & 預處理：註解過濾、行延續、分詞 \\
+                    & \texttt{parse\_elements.py}   & 元件語法解析 (R, L, C, V, I, E, G, H, F, K, D, X) \\
+                    & \texttt{parse\_directives.py}  & 分析指令解析 (.OP, .AC, .TRAN 等) \\
+                    & \texttt{param\_eval.py}  & \texttt{.PARAM} 參數運算環境 \\
+                    & \texttt{validator.py}    & 電路驗證（接地檢查、浮接偵測）\\
+                    & \texttt{formatter.py}    & 網表美化排版 \\
+                    & \texttt{diagnostics.py}  & 錯誤報告基礎設施 \\
+\midrule
+\texttt{engine/}   & \texttt{elements.py}     & 所有元件的 MNA stamp 實作 \\
+                    & \texttt{matrix.py}       & 抽象矩陣基底類別與稠密矩陣實作 \\
+\midrule
+\texttt{runtime/}  & \texttt{circuit.py}      & 電路建構器（Two-Pass 建構法）\\
+                    & \texttt{solver.py}       & 稀疏矩陣求解器（v0.4 SciPy Sparse）\\
+                    & \texttt{runner.py}       & 分析排程總管（含 .STEP 掃描）\\
+                    & \texttt{measure.py}      & \texttt{.MEASURE} 量測引擎 \\
+\midrule
+\texttt{utils/}    & \texttt{unit\_conv.py}   & SPICE 單位轉換器 \\
+\midrule
+\texttt{frontend/} & \texttt{app.py}          & FastAPI Web API 端點 \\
+\midrule
+根目錄              & \texttt{main.py}         & CLI 批次模擬入口點 \\
+\bottomrule
+\end{longtable}
+
+
+% ============================================================
+\section{網表語法與編譯器}
+% ============================================================
+
+\subsection{SPICE 網表格式}
+
+NextSPICE 接受標準 SPICE 格式的純文字網表。基本語法規則如下：
+
+\begin{itemize}
+  \item 第一行為電路標題（Title Line）。
+  \item 以 \texttt{*} 開頭的行為註解。
+  \item 以 \texttt{+} 開頭的行為前一行的延續。
+  \item \texttt{;} 或 \texttt{\$} 後方的文字為行內註解。
+  \item \texttt{.END} 標記網表結束。
+  \item 節點名稱 \texttt{0}、\texttt{GND}、\texttt{GROUND} 均代表接地。
+\end{itemize}
+
+\subsubsection{元件語法}
+
+\begin{lstlisting}[language=SPICE,caption={元件定義範例}]
+* 被動元件
+R1 IN OUT 1k           ; 電阻 1k歐姆
+C1 OUT 0 100n          ; 電容 100nF
+L1 IN N1 10m           ; 電感 10mH
+K1 L1 L2 0.99          ; 互感，耦合係數 0.99
+
+* 獨立源
+V1 IN 0 DC 10                          ; 直流電壓源
+V2 IN 0 AC 1 0                         ; 交流源 (振幅 1V, 相位 0°)
+V3 IN 0 SIN(0 5 1k 0 0)               ; 正弦波
+V4 IN 0 PULSE(0 5 1m 1u 1u 4m 10m)    ; 脈衝波
+V5 IN 0 PWL(0 0 1m 5 2m 5 3m 0)       ; 分段線性波
+
+* 受控源
+E1 OUT 0 IN 0 100      ; VCVS, 增益 100
+G1 OUT 0 IN 0 0.1      ; VCCS, 轉導 0.1 S
+H1 OUT 0 V1 50         ; CCVS, 轉阻 50 Ω
+F1 OUT 0 V1 2          ; CCCS, 電流增益 2
+
+* 子電路呼叫
+X1 IN OUT VCC 0 OPAMP  ; 呼叫 OPAMP 子電路
+\end{lstlisting}
+
+\subsubsection{分析指令語法}
+
+\begin{lstlisting}[language=SPICE,caption={分析指令範例}]
+.OP                             ; 直流工作點
+.AC DEC 100 10 1MEG             ; 交流掃描: 對數, 100點/十倍頻, 10Hz~1MHz
+.DC V1 0 10 0.1                 ; 直流掃描: V1 從 0V 到 10V, 步進 0.1V
+.TRAN 10u 10m                   ; 暫態分析: 步長 10μs, 終止 10ms
+.SENS V(OUT) V1                 ; 靈敏度: 輸出 V(OUT), 輸入 V1
+.STEP PARAM R_VAL 1k 10k 1k    ; 參數掃描
+.PARAM R_VAL=1k                 ; 參數定義
+.MEASURE TRAN delay TRIG V(IN) VAL=2.5 RISE=1
++                   TARG V(OUT) VAL=2.5 RISE=1
+\end{lstlisting}
+
+\subsection{單位轉換系統}
+
+NextSPICE 實作了嚴格的 SPICE 單位轉換器（\texttt{unit\_conv.py}），支援以下乘數後綴：
+
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+\textbf{後綴} & \textbf{名稱} & \textbf{倍率} & \textbf{範例} \\
+\midrule
+\texttt{T}   & Tera  & $10^{12}$   & \texttt{1T} = $10^{12}$ \\
+\texttt{G}   & Giga  & $10^{9}$    & \texttt{2.2G} = $2.2\times10^{9}$ \\
+\texttt{MEG} & Mega  & $10^{6}$    & \texttt{1MEG} = $10^{6}$ \\
+\texttt{K}   & Kilo  & $10^{3}$    & \texttt{4.7K} = $4700$ \\
+\texttt{M}   & Milli & $10^{-3}$   & \texttt{10M} = $0.01$ \\
+\texttt{U}   & Micro & $10^{-6}$   & \texttt{100U} = $10^{-4}$ \\
+\texttt{N}   & Nano  & $10^{-9}$   & \texttt{47N} = $4.7\times10^{-8}$ \\
+\texttt{P}   & Pico  & $10^{-12}$  & \texttt{22P} = $2.2\times10^{-11}$ \\
+\texttt{F}   & Femto & $10^{-15}$  & \texttt{1F} = $10^{-15}$ \\
+\texttt{MIL} & Mil   & $25.4\times10^{-6}$ & 印刷電路板單位 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+乘數後方可接合法物理單位（\texttt{V}, \texttt{A}, \texttt{OHM}, \texttt{F}, \texttt{H}, \texttt{S} 等），例如 \texttt{1kOHM}、\texttt{10uF}。系統以正則表達式嚴格驗證格式，任何非法後綴都會拋出錯誤。
+
+\subsection{編譯流程}
+
+編譯器（\texttt{compiler/frontend.py} 中的 \texttt{SpiceParser} 類別）執行以下步驟：
+
+\begin{enumerate}
+  \item \textbf{預處理}（\texttt{preprocess.py}）：
+    \begin{itemize}
+      \item 移除註解行（\texttt{*} 開頭）與空行。
+      \item 處理行延續（\texttt{+} 開頭的行合併至前一行）。
+      \item 以 \texttt{;} 或 \texttt{\$} 截斷行內註解。
+      \item 偵測 \texttt{.END} 指令作為結束標記。
+    \end{itemize}
+
+  \item \textbf{分詞與 AST 建構}（\texttt{preprocess.py}）：
+    \begin{itemize}
+      \item 展開括號與逗號為空白分隔的 token。
+      \item 保留 \texttt{\{...\}} 內的參數表達式不拆分。
+      \item 依據首 token 分類為 \texttt{directive}（以 \texttt{.} 開頭）或 \texttt{element}。
+    \end{itemize}
+
+  \item \textbf{參數環境建構}（\texttt{param\_eval.py}）：
+    \begin{itemize}
+      \item 蒐集所有 \texttt{.PARAM} 指令。
+      \item 以 Python \texttt{math} 模組函數建立安全的運算命名空間。
+      \item 儲存於 \texttt{param\_env} 字典中。
+    \end{itemize}
+
+  \item \textbf{元件與指令解析}：
+    \begin{itemize}
+      \item 遇到 \texttt{.SUBCKT} 時切換作用域至子電路定義內。
+      \item 遇到 \texttt{.ENDS} 時切回主電路作用域。
+      \item 元件按首字母前綴路由至對應解析函數。
+      \item 所有節點名稱統一正規化（\texttt{GND} $\rightarrow$ \texttt{0}）。
+      \item \texttt{\{...\}} 參數表達式透過 \texttt{param\_env} 求值。
+    \end{itemize}
+
+  \item \textbf{子電路展平}（Macro Expansion）：
+    \begin{itemize}
+      \item 遞迴展開所有 \texttt{X} 開頭的子電路呼叫。
+      \item 自動產生前綴（如 \texttt{X1.R1}）避免名稱衝突。
+      \item 建立內外節點映射表；接地節點（\texttt{0}）永不重新映射。
+      \item 交叉參照欄位（\texttt{ctrl\_source}、\texttt{element1} 等）也同步加上前綴。
+    \end{itemize}
+
+  \item \textbf{驗證}（\texttt{validator.py}）：
+    \begin{itemize}
+      \item 確認接地節點存在。
+      \item 偵測浮接節點（連接數 $< 2$ 的節點）。
+    \end{itemize}
+\end{enumerate}
+
+編譯器最終輸出一份 JSON 格式的電路描述，包含 \texttt{elements}（元件清單）、\texttt{analyses}（分析指令）、\texttt{params}（參數）、\texttt{subckts}（子電路藍圖）等欄位。
+
+\subsection{子電路展平演算法}
+
+子電路展平採用遞迴深度優先策略：
+
+\begin{lstlisting}[language=PythonSPICE,caption={子電路展平核心邏輯}]
+def expand(elements, prefix, node_map):
+    for el in elements:
+        if el["type"] == "subckt_call":
+            sub_def = subckts[el["subname"]]
+            new_node_map = {}
+            for i, pin in enumerate(sub_def["pins"]):
+                ext_node = el["pins"][f"p{i}"]
+                new_node_map[pin] = node_map.get(ext_node, ext_node)
+            new_prefix = f"{prefix}{el['name']}."
+            expand(sub_def["elements"], new_prefix, new_node_map)
+        else:
+            new_el = deepcopy(el)
+            new_el["name"] = f"{prefix}{new_el['name']}"
+            # 重新映射所有非接地節點
+            for k, v in new_el["pins"].items():
+                if v != "0":
+                    new_el["pins"][k] = node_map.get(v, f"{prefix}{v}")
+            flat_elements.append(new_el)
+\end{lstlisting}
+
+此演算法的時間複雜度為 $O(N_{\text{subckt}} \cdot N_{\text{elements}})$，支援任意深度的巢狀子電路。
+
+
+% ============================================================
+\section{修正節點分析法（MNA）}
+% ============================================================
+
+\subsection{理論基礎}
+
+修正節點分析法（Modified Nodal Analysis, MNA）是 SPICE 模擬器的數學核心。其原理是將電路轉換為聯立線性方程組：
+
+\begin{equation}
+\mathbf{A} \cdot \mathbf{x} = \mathbf{b}
+\label{eq:mna}
+\end{equation}
+
+\noindent 其中：
+\begin{itemize}
+  \item $\mathbf{A}$ 為 $n \times n$ 的係數矩陣（由元件戳印法填入）。
+  \item $\mathbf{x}$ 為未知向量，包含所有非接地節點電壓，以及需要額外變數的元件電流。
+  \item $\mathbf{b}$ 為激勵向量（由獨立源貢獻）。
+\end{itemize}
+
+\noindent 未知向量的維度為：
+\begin{equation}
+\dim(\mathbf{x}) = N_{\text{nodes}} + N_{\text{extra}}
+\end{equation}
+
+\noindent 其中 $N_{\text{nodes}}$ 為非接地節點數，$N_{\text{extra}}$ 為電壓源、電感器及部分受控源所需的額外電流變數數量。
+
+\subsection{元件戳印法（Stamping）}
+
+每個元件透過 \texttt{stamp()} 方法將自身的電路方程式「戳印」到 $\mathbf{A}$ 矩陣與 $\mathbf{b}$ 向量中。以下逐一推導各元件的戳印規則。
+
+\subsubsection{電阻器}
+
+電阻器 $R$ 連接節點 $n_1$ 與 $n_2$，其歐姆定律為：
+\begin{equation}
+I_{n_1 \to n_2} = G(V_{n_1} - V_{n_2}), \quad G = \frac{1}{R}
+\end{equation}
+
+戳印規則（conductance stamp）：
+\begin{equation}
+\begin{bmatrix}
+A[n_1,n_1] & A[n_1,n_2] \\
+A[n_2,n_1] & A[n_2,n_2]
+\end{bmatrix}
+\mathrel{+}=
+\begin{bmatrix}
++G & -G \\
+-G & +G
+\end{bmatrix}
+\end{equation}
+
+\noindent 實作中，若 $n_1 = 0$（接地），則跳過該行列的戳印。
+
+\subsubsection{電壓源}
+
+電壓源 $V_s$ 連接 $n_1$（正端）與 $n_2$（負端），引入額外電流變數 $i_x$（索引 \texttt{extra\_idx}），其約束為：
+\begin{equation}
+V_{n_1} - V_{n_2} = V_s
+\end{equation}
+
+同時 $i_x$ 也出現在 KCL 方程中。戳印規則：
+\begin{equation}
+\begin{aligned}
+A[n_1, i_x] &\mathrel{+}= +1, \quad A[i_x, n_1] \mathrel{+}= +1 \\
+A[n_2, i_x] &\mathrel{+}= -1, \quad A[i_x, n_2] \mathrel{+}= -1 \\
+b[i_x] &= V_s
+\end{aligned}
+\end{equation}
+
+\noindent 在交流模式下，$b[i_x] = V_{\text{ac}} \cdot e^{j\phi}$（複數相量）。在暫態模式下，$b[i_x]$ 為當下時間點的瞬時波形值。
+
+\subsubsection{電流源}
+
+電流源 $I_s$ 從 $n_1$ 流向 $n_2$，不引入額外變數。戳印規則：
+\begin{equation}
+b[n_1] \mathrel{-}= I_s, \quad b[n_2] \mathrel{+}= I_s
+\end{equation}
+
+\subsubsection{電容器}
+
+電容器的行為取決於分析模式：
+
+\paragraph{直流模式（.OP）：} 電容視為開路，不戳印任何元素。
+
+\paragraph{交流模式（.AC）：} 電容的導納為：
+\begin{equation}
+Y_C = j\omega C, \quad \omega = 2\pi f
+\end{equation}
+
+戳印規則同電阻器，將 $G$ 替換為 $Y_C$：
+\begin{equation}
+\begin{bmatrix}
+A[n_1,n_1] & A[n_1,n_2] \\
+A[n_2,n_1] & A[n_2,n_2]
+\end{bmatrix}
+\mathrel{+}=
+\begin{bmatrix}
++Y_C & -Y_C \\
+-Y_C & +Y_C
+\end{bmatrix}
+\end{equation}
+
+\paragraph{暫態模式（.TRAN）：} 使用後向歐拉法（Backward Euler）離散化：
+\begin{equation}
+i_C(t) = C\frac{dv}{dt} \approx C\frac{v(t) - v(t-\Delta t)}{\Delta t}
+\end{equation}
+
+\noindent 定義等效電導與歷史電流：
+\begin{equation}
+G_{\text{eq}} = \frac{C}{\Delta t}, \quad I_{\text{hist}} = G_{\text{eq}} \cdot v_{\text{prev}}
+\end{equation}
+
+\noindent 其中 $v_{\text{prev}} = V_{n_1}(t-\Delta t) - V_{n_2}(t-\Delta t)$ 為前一時步的電容跨壓。
+
+戳印規則：
+\begin{equation}
+\begin{aligned}
+&\text{矩陣 } \mathbf{A}：\quad \text{同電阻器，以 } G_{\text{eq}} \text{ 取代 } G \\
+&\text{向量 } \mathbf{b}：\quad b[n_1] \mathrel{+}= I_{\text{hist}}, \quad b[n_2] \mathrel{-}= I_{\text{hist}}
+\end{aligned}
+\end{equation}
+
+\subsubsection{電感器}
+
+電感器引入額外電流變數 $i_x$，其基本關係為：
+\begin{equation}
+V_{n_1} - V_{n_2} = L\frac{di}{dt}
+\end{equation}
+
+\paragraph{直流模式：} 電感視為短路：
+\begin{equation}
+\begin{aligned}
+A[n_1, i_x] &\mathrel{+}= 1, \quad A[i_x, n_1] \mathrel{+}= 1 \\
+A[n_2, i_x] &\mathrel{+}= -1, \quad A[i_x, n_2] \mathrel{+}= -1 \\
+b[i_x] &= 0
+\end{aligned}
+\end{equation}
+
+\paragraph{交流模式：} 電感的阻抗為 $Z_L = j\omega L$：
+\begin{equation}
+A[i_x, i_x] \mathrel{-}= j\omega L
+\end{equation}
+
+\paragraph{暫態模式：} 後向歐拉法離散化：
+\begin{equation}
+V_L = L\frac{di}{dt} \approx L\frac{i(t) - i(t-\Delta t)}{\Delta t}
+\end{equation}
+
+\noindent 定義等效電阻與歷史電壓：
+\begin{equation}
+R_{\text{eq}} = \frac{L}{\Delta t}, \quad V_{\text{hist}} = -R_{\text{eq}} \cdot i_{\text{prev}}
+\end{equation}
+
+戳印規則：
+\begin{equation}
+A[i_x, i_x] \mathrel{-}= R_{\text{eq}}, \quad b[i_x] \mathrel{+}= V_{\text{hist}}
+\end{equation}
+
+\subsubsection{互感（Mutual Inductance）}
+
+互感元件 $K$ 耦合兩個電感器 $L_1$ 與 $L_2$，互感量為：
+\begin{equation}
+M = k\sqrt{L_1 L_2}, \quad -1 \leq k \leq 1
+\end{equation}
+
+\paragraph{交流模式：}
+\begin{equation}
+Z_M = j\omega M
+\end{equation}
+\begin{equation}
+A[i_{x1}, i_{x2}] \mathrel{-}= Z_M, \quad A[i_{x2}, i_{x1}] \mathrel{-}= Z_M
+\end{equation}
+
+\paragraph{暫態模式：}
+\begin{equation}
+R_M = \frac{M}{\Delta t}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+A[i_{x1}, i_{x2}] &\mathrel{-}= R_M, \quad A[i_{x2}, i_{x1}] \mathrel{-}= R_M \\
+b[i_{x1}] &\mathrel{+}= -R_M \cdot i_{L_2,\text{prev}} \\
+b[i_{x2}] &\mathrel{+}= -R_M \cdot i_{L_1,\text{prev}}
+\end{aligned}
+\end{equation}
+
+\subsubsection{電壓控制電壓源（VCVS，E 元件）}
+
+VCVS 輸出端為 $(n_{o+}, n_{o-})$，控制端為 $(n_{i+}, n_{i-})$，增益為 $A_v$。約束方程：
+\begin{equation}
+V_{o+} - V_{o-} = A_v(V_{i+} - V_{i-})
+\end{equation}
+
+引入額外電流變數 $i_x$，戳印規則：
+\begin{equation}
+\begin{aligned}
+A[n_{o+}, i_x] &\mathrel{+}= 1, \quad A[i_x, n_{o+}] \mathrel{+}= 1 \\
+A[n_{o-}, i_x] &\mathrel{+}= -1, \quad A[i_x, n_{o-}] \mathrel{+}= -1 \\
+A[i_x, n_{i+}] &\mathrel{-}= A_v, \quad A[i_x, n_{i-}] \mathrel{+}= A_v
+\end{aligned}
+\end{equation}
+
+\subsubsection{電壓控制電流源（VCCS，G 元件）}
+
+VCCS 不引入額外變數。轉導為 $g_m$，輸出電流 $I = g_m(V_{i+} - V_{i-})$。
+
+戳印規則：
+\begin{equation}
+\begin{aligned}
+A[n_{o+}, n_{i+}] &\mathrel{+}= g_m, \quad A[n_{o+}, n_{i-}] \mathrel{-}= g_m \\
+A[n_{o-}, n_{i+}] &\mathrel{-}= g_m, \quad A[n_{o-}, n_{i-}] \mathrel{+}= g_m
+\end{aligned}
+\end{equation}
+
+\subsubsection{電流控制電壓源（CCVS，H 元件）}
+
+CCVS 依賴另一電壓源 $V_{\text{ctrl}}$ 的電流，轉阻為 $R_m$。引入額外電流變數 $i_x$：
+\begin{equation}
+V_{o+} - V_{o-} = R_m \cdot I_{V_{\text{ctrl}}}
+\end{equation}
+
+戳印規則：
+\begin{equation}
+\begin{aligned}
+A[n_{o+}, i_x] &\mathrel{+}= 1, \quad A[i_x, n_{o+}] \mathrel{+}= 1 \\
+A[n_{o-}, i_x] &\mathrel{+}= -1, \quad A[i_x, n_{o-}] \mathrel{+}= -1 \\
+A[i_x, i_{\text{ctrl}}] &\mathrel{-}= R_m
+\end{aligned}
+\end{equation}
+
+\subsubsection{電流控制電流源（CCCS，F 元件）}
+
+CCCS 不引入額外變數。電流增益為 $\alpha$：
+\begin{equation}
+I_{\text{out}} = \alpha \cdot I_{V_{\text{ctrl}}}
+\end{equation}
+
+戳印規則：
+\begin{equation}
+A[n_{o+}, i_{\text{ctrl}}] \mathrel{+}= \alpha, \quad A[n_{o-}, i_{\text{ctrl}}] \mathrel{-}= \alpha
+\end{equation}
+
+\subsection{節點管理器}
+
+\texttt{NodeManager} 類別負責將節點字串名稱映射為整數索引。接地節點 \texttt{0} 固定映射為索引 0，不佔用未知數空間。其餘節點依出現順序分配索引 $1, 2, 3, \ldots$，在 MNA 矩陣中的行列索引則為 $0, 1, 2, \ldots$（即節點索引減一）。
+
+
+% ============================================================
+\section{時域波形產生器}
+% ============================================================
+
+NextSPICE 支援三種時域波形函數，由共用函數 \texttt{eval\_source\_waveform()} 實作。
+
+\subsection{正弦波 SIN}
+
+語法：\texttt{SIN(VO VA FREQ TD THETA)}
+
+\begin{equation}
+v(t) = \begin{cases}
+V_O & \text{if } t < t_d \\
+V_O + V_A \cdot e^{-\theta(t-t_d)} \cdot \sin\bigl(2\pi f(t-t_d)\bigr) & \text{if } t \geq t_d
+\end{cases}
+\end{equation}
+
+\noindent 其中：
+\begin{itemize}
+  \item $V_O$：直流偏移量
+  \item $V_A$：振幅
+  \item $f$：頻率 (Hz)
+  \item $t_d$：延遲時間
+  \item $\theta$：阻尼係數（$\theta = 0$ 時為無阻尼正弦波）
+\end{itemize}
+
+\subsection{脈衝波 PULSE}
+
+語法：\texttt{PULSE(V1 V2 TD TR TF PW PER)}
+
+定義 $t_c = (t - t_d) \bmod T_{\text{per}}$，則：
+\begin{equation}
+v(t) = \begin{cases}
+V_1 & \text{if } t < t_d \\
+V_1 + (V_2 - V_1)\dfrac{t_c}{t_r} & \text{if } 0 \leq t_c < t_r \\[6pt]
+V_2 & \text{if } t_r \leq t_c < t_r + t_{pw} \\[4pt]
+V_2 - (V_2 - V_1)\dfrac{t_c - t_r - t_{pw}}{t_f} & \text{if } t_r + t_{pw} \leq t_c < t_r + t_{pw} + t_f \\[6pt]
+V_1 & \text{otherwise}
+\end{cases}
+\end{equation}
+
+\noindent 其中 $V_1$：初始值，$V_2$：脈衝值，$t_r$：上升時間，$t_f$：下降時間，$t_{pw}$：脈衝寬度，$T_{\text{per}}$：週期。
+
+\subsection{分段線性波 PWL}
+
+語法：\texttt{PWL(T1 V1 T2 V2 T3 V3 ...)}
+
+給定 $n$ 個時間--數值對 $\{(t_i, v_i)\}_{i=1}^{n}$，波形值以線性內插計算：
+
+\begin{equation}
+v(t) = \begin{cases}
+v_1 & \text{if } t \leq t_1 \\
+v_n & \text{if } t \geq t_n \\
+v_i + (v_{i+1} - v_i)\dfrac{t - t_i}{t_{i+1} - t_i} & \text{if } t_i \leq t \leq t_{i+1}
+\end{cases}
+\end{equation}
+
+
+% ============================================================
+\section{分析演算法}
+% ============================================================
+
+\subsection{直流工作點分析（.OP）}
+
+直流工作點分析求解穩態下的所有節點電壓與支路電流。
+
+\paragraph{演算法步驟：}
+\begin{enumerate}
+  \item 呼叫 \texttt{\_prepare\_mna\_structure()} 計算 MNA 維度：統計非接地節點數與額外變數數。
+  \item 建立 SciPy 稀疏 LIL 矩陣 $\mathbf{A}$（\texttt{lil\_matrix}）與零向量 $\mathbf{b}$。
+  \item 遍歷所有元件，呼叫 \texttt{stamp()} 填入矩陣。
+  \item 將 LIL 矩陣壓縮為 CSR 格式（Compressed Sparse Row）。
+  \item 呼叫 \texttt{scipy.sparse.linalg.spsolve()} 求解 $\mathbf{x} = \mathbf{A}^{-1}\mathbf{b}$。
+  \item 計算殘差 $r = \|\mathbf{A}\mathbf{x} - \mathbf{b}\|_\infty$ 以驗證解的精度。
+\end{enumerate}
+
+\paragraph{特殊處理：}
+\begin{itemize}
+  \item 電容器在直流模式下不戳印（視為開路）。
+  \item 電感器在直流模式下戳印為短路（$b[i_x] = 0$）。
+\end{itemize}
+
+\subsection{交流小訊號分析（.AC）}
+
+交流分析在複數域中進行頻率掃描，求解各節點的頻率響應。
+
+\paragraph{頻率點產生：}
+\begin{itemize}
+  \item \texttt{DEC}：以十倍頻為單位的對數分布，$f_k = 10^{\log_{10}(f_{\text{start}}) + k \cdot \Delta}$。
+  \item \texttt{OCT}：以八度音為單位的對數分布。
+  \item \texttt{LIN}：等距線性分布。
+\end{itemize}
+
+\paragraph{每個頻率點的計算：}
+\begin{enumerate}
+  \item 建立複數稀疏矩陣（\texttt{dtype=np.complex128}）。
+  \item 各元件以 $\omega = 2\pi f$ 計算阻抗：
+    \begin{itemize}
+      \item 電阻：$Z_R = R$（不變）
+      \item 電容：$Y_C = j\omega C$
+      \item 電感：$Z_L = j\omega L$
+    \end{itemize}
+  \item 求解複數方程組 $\mathbf{A}_{\text{ac}} \mathbf{x}_{\text{ac}} = \mathbf{b}_{\text{ac}}$。
+  \item 提取結果：
+    \begin{align}
+      |\text{Mag}|_{\text{dB}} &= 20\log_{10}|V_{\text{node}}| \\
+      \phi &= \arg(V_{\text{node}}) \text{ （度）}
+    \end{align}
+\end{enumerate}
+
+\subsection{直流掃描分析（.DC）}
+
+直流掃描對某一獨立源的直流值進行參數掃描。
+
+\paragraph{演算法：}
+\begin{enumerate}
+  \item 找到目標源元件。
+  \item 產生掃描點序列 $\{v_k\}_{k=0}^{N}$，其中 $v_k = v_{\text{start}} + k \cdot \Delta v$。
+  \item 對每個掃描點 $v_k$：
+    \begin{enumerate}[label=(\alph*)]
+      \item 修改目標源的 \texttt{dc\_value} 為 $v_k$。
+      \item 執行一次完整的 \texttt{.OP} 求解。
+      \item 記錄所有節點電壓。
+    \end{enumerate}
+  \item 復原目標源的原始值。
+\end{enumerate}
+
+\subsection{暫態分析（.TRAN）}
+
+暫態分析以後向歐拉法（Backward Euler Method，隱式一階方法）在時域中逐步推進模擬。
+
+\subsubsection{後向歐拉法原理}
+
+對於一般的常微分方程 $\dot{y} = f(t, y)$，後向歐拉法的遞推公式為：
+\begin{equation}
+y_{n+1} = y_n + \Delta t \cdot f(t_{n+1}, y_{n+1})
+\end{equation}
+
+此方法的關鍵特性為\textbf{無條件穩定}（unconditionally stable），意味著無論時步 $\Delta t$ 多大都不會發散。代價是只有一階精度，即截斷誤差為 $O(\Delta t)$。
+
+\subsubsection{伴隨電路模型（Companion Model）}
+
+後向歐拉法將動態元件（電容、電感）在每個時步轉化為等效的靜態電路模型：
+
+\paragraph{電容器的伴隨模型：}
+由 $i_C = C\,dv/dt$ 離散化後，電容器在每個時步等效為一個並聯的電導 $G_{\text{eq}}$ 與電流源 $I_{\text{hist}}$：
+
+\begin{equation}
+\boxed{G_{\text{eq}} = \frac{C}{\Delta t}, \quad I_{\text{hist}} = \frac{C}{\Delta t} \cdot v_{\text{prev}}}
+\end{equation}
+
+\paragraph{電感器的伴隨模型：}
+由 $v_L = L\,di/dt$ 離散化後，電感器在每個時步等效為一個串聯的電阻 $R_{\text{eq}}$ 與電壓源 $V_{\text{hist}}$：
+
+\begin{equation}
+\boxed{R_{\text{eq}} = \frac{L}{\Delta t}, \quad V_{\text{hist}} = -\frac{L}{\Delta t} \cdot i_{\text{prev}}}
+\end{equation}
+
+\subsubsection{暫態分析流程}
+
+\begin{enumerate}
+  \item \textbf{初始條件}：在 $t = 0$ 時，將所有具暫態波形的源設為其 $t=0$ 的瞬時值，然後執行一次 \texttt{.OP} 求解，得到初始解向量 $\mathbf{x}_0$。
+  \item \textbf{歷史更新}：從 $\mathbf{x}_0$ 提取所有電容跨壓和電感電流，儲存為 $v_{\text{prev}}$ 與 $i_{\text{prev}}$。
+  \item \textbf{時間步進迴圈}：對每個時步 $t_k = k \cdot \Delta t$：
+    \begin{enumerate}[label=(\alph*)]
+      \item 建立全新的稀疏 LIL 矩陣。
+      \item 評估所有時域波形在 $t_k$ 的瞬時值。
+      \item 各元件以暫態模式（含伴隨模型）戳印矩陣。
+      \item 壓縮為 CSR 格式並求解。
+      \item 更新所有動態元件的歷史狀態。
+    \end{enumerate}
+\end{enumerate}
+
+\paragraph{歷史更新公式：}
+
+電容器：
+\begin{equation}
+v_{\text{prev}} \leftarrow x[n_1 - 1] - x[n_2 - 1]
+\end{equation}
+
+電感器：
+\begin{equation}
+i_{\text{prev}} \leftarrow x[i_x]
+\end{equation}
+
+\subsection{靈敏度分析（.SENS）}
+
+靈敏度分析使用\textbf{中央差分法}（Central Difference Method）計算各元件參數對直流增益的影響。
+
+\subsubsection{直流增益定義}
+
+\begin{equation}
+G_{\text{base}} = \frac{V_{\text{out}}}{V_{\text{in}}}
+\end{equation}
+
+\noindent 其中 $V_{\text{out}}$ 為指定輸出節點電壓，$V_{\text{in}}$ 為指定輸入源的直流值。
+
+\subsubsection{中央差分靈敏度}
+
+對每個被測元件的參數 $P$：
+
+\begin{enumerate}
+  \item 動態計算微擾量：
+  \begin{equation}
+  \Delta P = \max\bigl(|P| \cdot \epsilon_{\text{rel}},\; \epsilon_{\text{min}}\bigr)
+  \end{equation}
+  預設 $\epsilon_{\text{rel}} = 10^{-5}$，$\epsilon_{\text{min}} = 10^{-12}$。
+
+  \item 正向微擾：將參數設為 $P + \Delta P$，求解 \texttt{.OP}，計算增益 $G^+$。
+  \item 反向微擾：將參數設為 $P - \Delta P$，求解 \texttt{.OP}，計算增益 $G^-$。
+  \item 立即復原參數原始值。
+
+  \item 絕對靈敏度：
+  \begin{equation}
+  S_{\text{abs}} = \frac{G^+ - G^-}{2\,\Delta P}
+  \end{equation}
+
+  \item 正規化靈敏度：
+  \begin{equation}
+  S_{\text{norm}} = \frac{P}{G_{\text{base}}} \cdot S_{\text{abs}}
+  \end{equation}
+\end{enumerate}
+
+正規化靈敏度的物理意義為：當參數 $P$ 變化 1\% 時，增益 $G$ 大約變化 $S_{\text{norm}}$\%。
+
+\subsection{參數掃描（.STEP）}
+
+\texttt{.STEP} 指令在最外層包裹一個迴圈，對指定元件的參數值進行掃描。每個掃描步驟都會重新建立 \texttt{Simulator} 實例並執行所有已定義的分析。
+
+\begin{equation}
+P_k = P_{\text{start}} + k \cdot \Delta P, \quad k = 0, 1, \ldots, \left\lfloor\frac{P_{\text{stop}} - P_{\text{start}}}{\Delta P}\right\rfloor
+\end{equation}
+
+
+% ============================================================
+\section{量測引擎}
+% ============================================================
+
+\subsection{.MEASURE TRAN 指令}
+
+量測引擎（\texttt{measure.py}）實作了 \texttt{.MEASURE TRAN} 語法，用於從暫態模擬結果中提取特定的時間特徵。
+
+\subsubsection{TRIG...TARG 雙點測量語法}
+
+\begin{lstlisting}[language=SPICE]
+.MEASURE TRAN delay TRIG V(IN) VAL=2.5 RISE=1
++                   TARG V(OUT) VAL=2.5 RISE=1
+\end{lstlisting}
+
+此指令表示：量測從 \texttt{V(IN)} 第一次上升穿越 2.5V 到 \texttt{V(OUT)} 第一次上升穿越 2.5V 之間的時間差。
+
+\subsubsection{穿越點偵測演算法}
+
+對於波形 $y(t)$ 與目標值 $v_{\text{th}}$，系統在相鄰取樣點之間偵測穿越事件：
+
+\begin{itemize}
+  \item \textbf{上升穿越}（RISE）：$y[i] < v_{\text{th}} \leq y[i+1]$
+  \item \textbf{下降穿越}（FALL）：$y[i] > v_{\text{th}} \geq y[i+1]$
+  \item \textbf{任意穿越}（CROSS）：上升或下降皆計入
+\end{itemize}
+
+穿越時間以線性內插計算：
+\begin{equation}
+t_{\text{cross}} = t_i + \frac{v_{\text{th}} - y_i}{y_{i+1} - y_i} \cdot (t_{i+1} - t_i)
+\end{equation}
+
+最終量測值為兩個穿越時間的差：
+\begin{equation}
+\text{delay} = t_{\text{TARG}} - t_{\text{TRIG}}
+\end{equation}
+
+
+% ============================================================
+\section{稀疏矩陣求解策略}
+% ============================================================
+
+\subsection{為何使用稀疏矩陣}
+
+電路的 MNA 矩陣具有高度稀疏性：一個有 $n$ 個節點的電路，其 MNA 矩陣維度為 $n \times n$，但非零元素數量通常僅為 $O(n)$ 等級（因為每個元件最多影響 4 個矩陣位置）。
+
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{矩陣類型} & \textbf{建構時間} & \textbf{求解時間} & \textbf{記憶體} \\
+\midrule
+稠密矩陣 & $O(n^2)$ & $O(n^3)$ & $O(n^2)$ \\
+稀疏矩陣 & $O(n_z)$ & $O(n_z^2)$（最壞） & $O(n_z)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent 其中 $n_z$ 為非零元素數。對於大規模電路（$n > 100$），稀疏矩陣可帶來約 1000 倍的速度提升。
+
+\subsection{SciPy 稀疏矩陣工作流程}
+
+NextSPICE 的稀疏矩陣策略分為三個階段：
+
+\begin{enumerate}
+  \item \textbf{LIL 格式建構}（List of Lists）：
+
+  以 \texttt{scipy.sparse.lil\_matrix} 建立矩陣。LIL 格式最適合動態逐元素插入，因為它以鏈結串列儲存每一列的非零元素。
+
+  \item \textbf{CSR 格式壓縮}（Compressed Sparse Row）：
+
+  戳印完成後，呼叫 \texttt{.tocsr()} 將 LIL 矩陣轉換為 CSR 格式。CSR 以三個一維陣列儲存非零值、列指標與列偏移量，是最高效的矩陣向量運算格式。
+
+  \item \textbf{稀疏直接求解}：
+
+  呼叫 \texttt{scipy.sparse.linalg.spsolve()} 進行 LU 分解求解。底層使用 SuperLU 或 UMFPACK 演算法。
+\end{enumerate}
+
+
+% ============================================================
+\section{電路建構器（Two-Pass 建構法）}
+% ============================================================
+
+\texttt{Circuit} 類別（\texttt{runtime/circuit.py}）負責將編譯器輸出的 JSON 藍圖實體化為 Python 元件物件。為了正確處理元件間的交叉參照關係，建構過程分為兩個 Pass：
+
+\subsection{Pass 1：獨立元件建構}
+
+在第一輪中建構所有不依賴其他元件的基礎元件：
+\begin{itemize}
+  \item 電阻器（R）、電容器（C）、電感器（L）
+  \item 電壓源（V）、電流源（I）
+  \item 電壓控制源（E, G）
+\end{itemize}
+
+每個元件建構後立即註冊到 \texttt{\_element\_by\_name} 字典，以支援 $O(1)$ 的名稱查找。
+
+\subsection{Pass 2：交叉參照解析}
+
+在第二輪中處理需要引用其他元件的延遲元件：
+\begin{itemize}
+  \item \textbf{互感（K）}：需引用兩個電感器物件 $L_1$ 與 $L_2$。
+  \item \textbf{CCVS（H）}：需引用控制電壓源的名稱以取得其電流索引。
+  \item \textbf{CCCS（F）}：同 H 元件。
+\end{itemize}
+
+若引用的目標元件不存在，系統會拋出明確的錯誤訊息。
+
+
+% ============================================================
+\section{分析排程總管}
+% ============================================================
+
+\texttt{SimulationRunner}（\texttt{runtime/runner.py}）是最高層的分析協調器，負責：
+
+\begin{enumerate}
+  \item 解析 \texttt{.STEP} 配置，產生外層參數掃描迴圈。
+  \item 在每個掃描步驟中，建立 \texttt{Simulator} 實例。
+  \item 依序執行所有已定義的分析（\texttt{.OP}、\texttt{.TRAN}、\texttt{.AC}、\texttt{.DC}、\texttt{.SENS}）。
+  \item 將結果打包為統一的 JSON 格式。
+\end{enumerate}
+
+\subsection{結果輸出格式}
+
+Runner 產出的 JSON 結構包含：
+
+\begin{lstlisting}[language={},caption={輸出結構}]
+{
+  "status": "success",
+  "logs": ["[INFO] ...", ...],
+  "op_results": {
+    "V(IN)": 10.0,
+    "V(OUT)": 5.0,
+    "I(V1)": -0.005,
+    "P(R1)": 0.025
+  },
+  "plots": [
+    {
+      "name": "V(OUT)",
+      "x": [0.0, 0.001, ...],
+      "y": [5.0, 5.1, ...],
+      "type": "solid"
+    }
+  ],
+  "layout": {
+    "title": "Transient Response",
+    "xaxis": "Time (s)",
+    "yaxis": "Voltage (V)"
+  }
+}
+\end{lstlisting}
+
+\subsection{功率計算}
+
+Runner 會自動為以下元件計算功率消耗：
+
+\begin{itemize}
+  \item 電阻器：$P_R = \dfrac{(V_{n_1} - V_{n_2})^2}{R}$
+  \item 電壓源：$P_V = V_{\text{dc}} \cdot I_{V}$
+\end{itemize}
+
+
+% ============================================================
+\section{支援的元件總覽}
+% ============================================================
+
+\begin{longtable}{ccccl}
+\toprule
+\textbf{前綴} & \textbf{類型} & \textbf{端子} & \textbf{額外變數} & \textbf{說明} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{前綴} & \textbf{類型} & \textbf{端子} & \textbf{額外變數} & \textbf{說明} \\
+\midrule
+\endhead
+R & 被動 & 2 & 0 & 電阻器（值 $> 0$）\\
+C & 被動 & 2 & 0 & 電容器（值 $\geq 0$）\\
+L & 被動 & 2 & 1 & 電感器（值 $\geq 0$）\\
+K & 被動 & --- & 0 & 互感（$|k| \leq 1$）\\
+V & 獨立源 & 2 & 1 & 電壓源（DC/AC/TRAN）\\
+I & 獨立源 & 2 & 0 & 電流源（DC/AC/TRAN）\\
+E & 受控源 & 4 & 1 & VCVS（電壓控制電壓源）\\
+G & 受控源 & 4 & 0 & VCCS（電壓控制電流源）\\
+H & 受控源 & 2+ref & 1 & CCVS（電流控制電壓源）\\
+F & 受控源 & 2+ref & 0 & CCCS（電流控制電流源）\\
+X & 階層 & 可變 & --- & 子電路呼叫 \\
+D & 非線性 & 2 & --- & 二極體（僅解析，未求解）\\
+\bottomrule
+\end{longtable}
+
+
+% ============================================================
+\section{完整模擬範例}
+% ============================================================
+
+\subsection{範例一：RC 低通濾波器頻率響應}
+
+\begin{lstlisting}[language=SPICE,caption={RC 低通濾波器}]
+RC Low Pass Filter
+V1 IN 0 AC 1 0
+R1 IN OUT 1k
+C1 OUT 0 100n
+.AC DEC 100 10 1MEG
+.END
+\end{lstlisting}
+
+\paragraph{理論分析：}
+此電路的轉移函數為：
+\begin{equation}
+H(j\omega) = \frac{V_{\text{out}}}{V_{\text{in}}} = \frac{1}{1 + j\omega RC}
+\end{equation}
+
+截止頻率：
+\begin{equation}
+f_c = \frac{1}{2\pi RC} = \frac{1}{2\pi \times 1000 \times 100 \times 10^{-9}} \approx 1.59\,\text{kHz}
+\end{equation}
+
+\subsection{範例二：RLC 暫態響應}
+
+\begin{lstlisting}[language=SPICE,caption={RLC 暫態響應}]
+RLC Transient
+V1 IN 0 PULSE(0 5 1m 1u 1u 4m 10m)
+L1 IN N1 10m
+C1 N1 0 1u
+R1 N1 0 10
+.TRAN 10u 10m
+.END
+\end{lstlisting}
+
+\paragraph{理論分析：}
+此 RLC 串並聯電路的自然頻率與阻尼比為：
+\begin{equation}
+\omega_0 = \frac{1}{\sqrt{LC}} = \frac{1}{\sqrt{10^{-2} \times 10^{-6}}} \approx 10{,}000\;\text{rad/s}
+\end{equation}
+\begin{equation}
+\zeta = \frac{1}{2R}\sqrt{\frac{L}{C}} = \frac{1}{2 \times 10}\sqrt{\frac{10^{-2}}{10^{-6}}} = 5
+\end{equation}
+
+由於 $\zeta > 1$，此電路為過阻尼（overdamped），不會出現振盪。
+
+\subsection{範例三：變壓器互感模型}
+
+\begin{lstlisting}[language=SPICE,caption={變壓器模型}]
+Transformer
+V1 P_IN 0 SIN(0 10 1k)
+R1 P_IN P1 1
+L1 P1 0 10m
+L2 S1 0 40m
+K1 L1 L2 0.99
+R2 S1 0 100
+.TRAN 10u 5m
+.END
+\end{lstlisting}
+
+\paragraph{理論分析：}
+匝比 $n$ 由電感比推導：
+\begin{equation}
+n = \sqrt{\frac{L_2}{L_1}} = \sqrt{\frac{40\text{m}}{10\text{m}}} = 2
+\end{equation}
+
+理想情況下（$k = 1$），次級開路電壓為初級電壓的 $n$ 倍。
+
+\subsection{範例四：含參數的靈敏度分析}
+
+\begin{lstlisting}[language=SPICE,caption={靈敏度分析}]
+Sensitivity Test
+V1 IN 0 DC 10
+R1 IN MID 1k
+R2 MID OUT 2k
+R3 OUT 0 3k
+.SENS V(OUT) V1
+.END
+\end{lstlisting}
+
+\paragraph{手動驗證：}
+使用分壓器公式，$V_{\text{OUT}}$ 對 $R_3$ 的靈敏度可由解析方法驗證，中央差分結果應與之吻合。
+
+
+% ============================================================
+\section{端到端資料流程圖}
+% ============================================================
+
+以下為 NextSPICE 從網表輸入到結果輸出的完整資料流程：
+
+\begin{enumerate}
+  \item \textbf{輸入}：使用者提交 SPICE 網表文字。
+
+  \item \textbf{編譯階段}：
+  \begin{enumerate}[label=\arabic{enumi}.\arabic*]
+    \item 預處理 $\rightarrow$ 移除註解、合併延續行。
+    \item 分詞 $\rightarrow$ 產生 token 序列。
+    \item AST 建構 $\rightarrow$ 分類為 element / directive。
+    \item 參數收集 $\rightarrow$ 建構 \texttt{param\_env}。
+    \item 元件解析 $\rightarrow$ 產生 JSON 元件物件。
+    \item 指令解析 $\rightarrow$ 產生分析配置。
+    \item 子電路展平 $\rightarrow$ 遞迴展開所有 X 呼叫。
+    \item 驗證 $\rightarrow$ 檢查接地與節點連通性。
+  \end{enumerate}
+
+  \item \textbf{建構階段}：
+  \begin{enumerate}[label=\arabic{enumi}.\arabic*]
+    \item Pass 1 $\rightarrow$ 建立獨立元件物件。
+    \item Pass 2 $\rightarrow$ 解析交叉參照（K, H, F）。
+    \item 節點映射 $\rightarrow$ 字串 $\rightarrow$ 整數索引。
+  \end{enumerate}
+
+  \item \textbf{模擬階段}（每個 .STEP 步驟）：
+  \begin{enumerate}[label=\arabic{enumi}.\arabic*]
+    \item 建立 Simulator 實例。
+    \item 計算 MNA 維度，分配額外變數索引。
+    \item 依分析類型執行：
+    \begin{itemize}
+      \item \texttt{.OP}：建構稀疏矩陣 $\rightarrow$ 戳印 $\rightarrow$ CSR 壓縮 $\rightarrow$ 求解。
+      \item \texttt{.AC}：頻率掃描 $\times$（複數矩陣建構 $\rightarrow$ 戳印 $\rightarrow$ 求解）。
+      \item \texttt{.DC}：參數掃描 $\times$ \texttt{.OP}。
+      \item \texttt{.TRAN}：初始 \texttt{.OP} $\rightarrow$ 時步迴圈 $\times$（伴隨模型戳印 $\rightarrow$ 求解 $\rightarrow$ 歷史更新）。
+      \item \texttt{.SENS}：基準增益 $\rightarrow$ 元件微擾迴圈 $\times$（$\pm\Delta P$ 各一次 \texttt{.OP}）。
+    \end{itemize}
+  \end{enumerate}
+
+  \item \textbf{量測階段}：執行 \texttt{.MEASURE} 指令，線性內插取值。
+
+  \item \textbf{輸出}：JSON 結構，包含日誌、工作點結果、波形圖資料與佈局資訊。
+\end{enumerate}
+
+
+% ============================================================
+\section{已知限制與未來展望}
+% ============================================================
+
+\subsection{目前限制}
+
+\begin{enumerate}
+  \item \textbf{非線性元件}：二極體（D）已可解析但尚未在求解器中實作 Newton-Raphson 迭代。
+  \item \textbf{電晶體}：尚未支援 BJT（Q）與 MOSFET（M）模型。
+  \item \textbf{自適應時步}：暫態分析使用固定時步，尚未實作基於截斷誤差的自適應步長控制。
+  \item \textbf{收斂控制}：缺乏限流（limiting）與阻尼（damping）機制來輔助非線性收斂。
+  \item \textbf{行為源}：尚不支援任意數學表達式的 B 元件。
+  \item \textbf{高階積分法}：僅實作一階後向歐拉法，尚未支援梯形法（Trapezoidal）或 Gear 法。
+\end{enumerate}
+
+\subsection{效能特性}
+
+\begin{center}
+\begin{tabular}{llc}
+\toprule
+\textbf{演算法} & \textbf{複雜度} & \textbf{狀態} \\
+\midrule
+MNA 元件戳印 & $O(1)$ /元件 & 完成 \\
+OP 稀疏求解 & $O(n_z^2)$ & 完成 \\
+AC 頻率掃描 & $O(N_f \times n_z^2)$ & 完成 \\
+DC 參數掃描 & $O(N_s \times n_z^2)$ & 完成 \\
+暫態時域積分 & $O(N_t \times n_z^2)$ & 完成 \\
+靈敏度微擾 & $O(N_p \times n_z^2)$ & 完成 \\
+子電路展平 & $O(N_X \times N_e)$ & 完成 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ============================================================
+\section*{附錄 A：數學符號表}
+% ============================================================
+\addcontentsline{toc}{section}{附錄 A：數學符號表}
+
+\begin{longtable}{cl}
+\toprule
+\textbf{符號} & \textbf{說明} \\
+\midrule
+\endfirsthead
+$\mathbf{A}$ & MNA 係數矩陣 \\
+$\mathbf{x}$ & 未知向量（節點電壓＋支路電流）\\
+$\mathbf{b}$ & 激勵向量 \\
+$G$ & 電導 ($1/R$) \\
+$Y_C$ & 電容導納 ($j\omega C$) \\
+$Z_L$ & 電感阻抗 ($j\omega L$) \\
+$G_{\text{eq}}$ & 電容伴隨電導 ($C/\Delta t$) \\
+$R_{\text{eq}}$ & 電感伴隨電阻 ($L/\Delta t$) \\
+$I_{\text{hist}}$ & 電容歷史電流 \\
+$V_{\text{hist}}$ & 電感歷史電壓 \\
+$M$ & 互感量 ($k\sqrt{L_1 L_2}$) \\
+$\omega$ & 角頻率 ($2\pi f$) \\
+$\Delta t$ & 時步大小 \\
+$S_{\text{abs}}$ & 絕對靈敏度 \\
+$S_{\text{norm}}$ & 正規化靈敏度 \\
+$n_z$ & 稀疏矩陣非零元素數 \\
+\bottomrule
+\end{longtable}
+
+% ============================================================
+\section*{附錄 B：SPICE 網表快速參考}
+% ============================================================
+\addcontentsline{toc}{section}{附錄 B：SPICE 網表快速參考}
+
+\begin{lstlisting}[language=SPICE,caption={完整語法快速參考}]
+* === 被動元件 ===
+Rname N+ N- value
+Cname N+ N- value
+Lname N+ N- value
+Kname Lname1 Lname2 coupling
+
+* === 獨立源 ===
+Vname N+ N- [DC value] [AC mag [phase]]
++                      [SIN(VO VA FREQ TD THETA)]
++                      [PULSE(V1 V2 TD TR TF PW PER)]
++                      [PWL(T1 V1 T2 V2 ...)]
+Iname N+ N- [DC value] [AC mag [phase]]
+
+* === 受控源 ===
+Ename N+ N- NC+ NC- gain        ; VCVS
+Gname N+ N- NC+ NC- gm          ; VCCS
+Hname N+ N- Vctrl rm            ; CCVS
+Fname N+ N- Vctrl gain          ; CCCS
+
+* === 子電路 ===
+.SUBCKT name pin1 pin2 ...
+  ... elements ...
+.ENDS [name]
+Xname ext1 ext2 ... subckt_name
+
+* === 分析指令 ===
+.OP
+.AC DEC|LIN|OCT points fstart fstop
+.DC source start stop step
+.TRAN tstep tstop
+.SENS V(node) [source]
+.STEP PARAM name start stop step
+
+* === 其他 ===
+.PARAM name=value
+.MEASURE TRAN name TRIG ... TARG ...
+.END
+\end{lstlisting}
+
+\end{document}

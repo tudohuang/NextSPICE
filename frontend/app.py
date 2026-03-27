@@ -9,7 +9,7 @@ from nextspice.compiler.frontend import SpiceParser
 from nextspice.runtime.circuit import Circuit
 from nextspice.runtime.runner import SimulationRunner # 引入大總管！
 from nextspice.compiler.formatter import SpiceFormatter
-
+import json
 app = FastAPI()
 
 class NetlistRequest(BaseModel):
@@ -53,9 +53,11 @@ async def run_simulation(request: NetlistRequest):
         
         # 為了保留前面的 compile logs，我們把它預先塞進 runner 的 log 裡面
         runner.response_data["logs"] = error_response["logs"] 
-        
+        final_result = runner.run_all()
+        with open("debug_dump.json", "w", encoding="utf-8") as f:
+            json.dump(final_result, f, indent=4, ensure_ascii=False)
         # 🚀 啟動大總管，直接回傳執行結果！
-        return runner.run_all()
+        return final_result
 
     except Exception as e:
         error_response["logs"].append(f"[ERR] API 崩潰: {str(e)}")

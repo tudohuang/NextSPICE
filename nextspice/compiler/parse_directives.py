@@ -42,12 +42,17 @@ def parse_directive(item, circuit, diagnostics, eval_func):
                         circuit["options"][key.upper()] = val.upper()
                 else:
                     circuit["options"][token.upper()] = True
-        elif cmd in ['.PRINT', '.PLOT']:
-            if len(tk) < 3: raise ValueError(f"{cmd} requires analysis type and targets")
-            circuit["outputs"].append({
-                "directive": cmd[1:], "analysis": tk[1].upper(),
-                "targets": [v.upper() for v in tk[2:]]
-            })
+        elif cmd in ['.PRINT', '.PROBE']:
+            # 語法範例: .PROBE TRAN V(V_OUT) I(V1)
+            if len(tk) >= 3:
+                circuit["outputs"].append({
+                    "type": cmd[1:], # 會存成 "PRINT" 或 "PROBE"
+                    "analysis_type": tk[1].lower(), # 會存成 "tran", "dc", "ac" 等
+                    "targets": [t.upper() for t in tk[2:]] # 把要看的變數全部轉大寫存起來
+                })
+            else:
+                diagnostics.append({"line": ln, "severity": "WARNING", "message": f"{cmd} requires analysis type and target variables"})
+
         elif cmd in ['.MEAS', '.MEASURE']:
             if len(tk) < 4: raise ValueError(".MEASURE requires analysis, name, and expressions")
             circuit["metadata"]["measures"].append({
@@ -84,6 +89,37 @@ def parse_directive(item, circuit, diagnostics, eval_func):
                 "start": eval_func(tk[start_idx]),
                 "stop": eval_func(tk[start_idx+1]),
                 "step": eval_func(tk[start_idx+2])
+            }
+
+        elif cmd == '.MODEL':
+            if len(tk) < 3:
+                diagnostics.append({"line": ln, "severity": "ERROR", "message": ".MODEL requires name and type"})
+                return
+            model_name = tk[1].upper()
+            # 有時候 type 和括號會黏在一起，例如 D(IS=...
+            raw_type_str = tk[2].upper()
+            model_type = raw_type_str.split('(')[0] 
+            
+            # 把後面的所有 token 組合起來，拔掉括號，找出所有的 key=value
+            param_str = " ".join(tk[2:]).upper()
+            param_str = param_str[param_str.find(model_type)+len(model_type):].replace('(', ' ').replace(')', ' ')
+            
+            # 用簡單的 Regex 抓出所有的 KEY=VALUE
+            params = {}
+            for match in re.finditer(r'([A-Z0-9_]+)\s*=\s*([^\s]+)', param_str):
+                key, val_str = match.groups()
+                try:
+                    # 這裡可以用你原本的 eval_func 解析 1e-14 這種科學記號
+                    params[key] = eval_func(val_str) 
+                except:
+                    params[key] = val_str # 如果不是數字，就存字串
+                    
+            # 存進藍圖裡！(記得在 Parser __init__ 準備一個 self.circuit["models"] = {})
+            if "models" not in circuit:
+                circuit["models"] = {}
+            circuit["models"][model_name] = {
+                "type": model_type,
+                "params": params
             }
 
         else:

@@ -110,7 +110,7 @@ def parse_element(item, circuit, diagnostics, eval_func):
             if len(tk) < 4: raise ValueError("D requires A, K nodes and model")
             circuit["elements"].append({
                 "type": "diode", "name": name,
-                "pins": {"a": norm_node(tk[1]), "k": norm_node(tk[2])},
+                "pins": {"p": norm_node(tk[1]), "n": norm_node(tk[2])},
                 "model": tk[3].upper()
             })
         elif prefix == 'X':

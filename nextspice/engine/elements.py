@@ -371,3 +371,62 @@ class CCCS(BaseElement):
         
         if self.np > 0: A[self.np-1, ctrl_idx] += self.gain
         if self.nn > 0: A[self.nn-1, ctrl_idx] -= self.gain
+
+class Diode:
+    """
+    NextSPICE 理想二極體模型 (Non-linear Element)
+    使用 Newton-Raphson 伴隨模型進行線性化
+    """
+    def __init__(self, name, n1, n2, is_sat=1e-14, n=1.0, temp=300):
+        self.name = name
+        self.n1 = n1  # Anode (陽極)
+        self.n2 = n2  # Cathode (陰極)
+        
+        # 物理參數
+        self.is_sat = is_sat  # 逆向飽和電流 (IS)
+        self.n = n            # 理想因子 (N)
+        k = 1.380649e-23      # 波茲曼常數
+        q = 1.602176634e-19   # 電子電荷
+        self.vt = (k * temp) / q  # 熱電壓 (~25.85mV)
+
+        # 🚀 告訴 Solver 我是非線性魔王！
+        self.is_nonlinear = True 
+        
+        # MNA 佔位需求 (不需額外變數，因為它是電壓控制的電流源)
+        self.extra_vars = 0   
+
+    def stamp_nonlinear(self, A, b, current_x, mapping):
+        """牛頓疊代專用：動態計算斜率與截距並蓋章"""
+        
+        # 1. 取得這顆二極體兩端「當下的猜測電壓」
+        v1 = current_x[self.n1 - 1] if self.n1 != 0 else 0.0
+        v2 = current_x[self.n2 - 1] if self.n2 != 0 else 0.0
+        vd = v1 - v2  # 二極體跨壓 V_D
+        
+        # 🚀 防爆裝甲 (Voltage Limiting)
+        # 指數函數極度危險！如果疊代過程中 vd 猜到 10V，np.exp 會直接引發 Overflow 崩潰
+        # 工業級 SPICE 會用 pnjlim 演算法，這裡我們用簡單的 Clip 限制最大順向電壓
+        vd_safe = np.clip(vd, -100.0, 0.85)
+        
+        # 2. 核心數學：Shockley Diode Equation 及其偏導數 (泰勒展開)
+        # 公式: I_D = IS * (exp(V_D / (N * V_T)) - 1)
+        exp_term = np.exp(vd_safe / (self.n * self.vt))
+        
+        id_current = self.is_sat * (exp_term - 1.0)
+        
+        # 斜率 G_eq = d(I_D) / d(V_D)
+        g_eq = (self.is_sat / (self.n * self.vt)) * exp_term
+        
+        # 截距電流 I_eq = I_D - G_eq * V_D (諾頓等效電流)
+        i_eq = id_current - g_eq * vd_safe
+        
+        # 3. 蓋章！把它視為一顆導納為 G_eq 的電阻，和一顆 I_eq 的獨立電流源
+        if self.n1 != 0:
+            A[self.n1 - 1, self.n1 - 1] += g_eq
+            b[self.n1 - 1] -= i_eq  # 電流流出陽極
+        if self.n2 != 0:
+            A[self.n2 - 1, self.n2 - 1] += g_eq
+            b[self.n2 - 1] += i_eq  # 電流流入陰極
+        if self.n1 != 0 and self.n2 != 0:
+            A[self.n1 - 1, self.n2 - 1] -= g_eq
+            A[self.n2 - 1, self.n1 - 1] -= g_eq

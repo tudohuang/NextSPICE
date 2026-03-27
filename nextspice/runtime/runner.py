@@ -94,16 +94,51 @@ class SimulationRunner:
                                     self.log(f"{name:<10} | {val:>12.5e} {unit}")
 
                     elif atype == "tran":
-                        if step_val == step_values[0]: self.log(f"--- .TRAN Analysis (0 to {analysis['tstop']*1000} ms) ---")
-                        tran_results = simulator.solve_tran(analysis['tstep'], analysis['tstop'])
-                        times = [self.safe_num(r["time"]) for r in tran_results if r["status"] == "SUCCESS"]
+                        self.log("--- .TRAN Analysis ---")
                         
-                        self.response_data["layout"] = {"title": "Transient Response", "xaxis": "Time (s)", "yaxis": "Voltage (V)"}
-                        for node_name in nodes_to_plot:
-                            idx = self.circuit.node_mgr.mapping[node_name] - 1
-                            v_data = [self.safe_num(r["x"][idx]) for r in tran_results if r["status"] == "SUCCESS"]
-                            ls = "dash" if "IN" in node_name.upper() else "solid"
-                            self.response_data["plots"].append({"name": f"V({node_name}){suffix}", "x": times, "y": v_data, "type": ls})
+                        tran_results = simulator.solve_tran(analysis["tstep"], analysis["tstop"])
+                        
+                        # 🚀 暴力全輸出：不管什麼過濾器了，矩陣算出什麼，我就打包什麼！
+                        formatted_tran = []
+                        for step in tran_results:
+                            if step.get("status") != "SUCCESS": continue
+                            
+                            # 拿到全部節點電壓
+                            full_report = simulator.get_full_report(step["x"])
+                            
+                            # 建立這一個時間點的完整資料包
+                            report = {"time": step["time"]}
+                            report.update(full_report)
+                            formatted_tran.append(report)
+                            
+                        self.response_data["tran_results"] = formatted_tran
+                        self.log(f"[OK] .TRAN 完成。共 {len(formatted_tran)} 個資料點。")
+
+                        if formatted_tran:
+                            # 🩸 你要看數字？我就印在 Log 裡證明它不是假算！
+                            # 抓出最後一個時間點 (t=50ms) 的所有數值印出來
+                            last_pt = formatted_tran[-1]
+                            debug_str = ", ".join([f"{k}: {v:.4f}" for k, v in last_pt.items()])
+                            self.log(f"[DEBUG] 矩陣最後一刻原始輸出 -> {debug_str}")
+
+                            # 🚀 畫圖數據綁定：保證 plots 陣列絕對塞滿東西
+                            t_vals = [step["time"] for step in formatted_tran]
+                            plot_keys = [k for k in formatted_tran[0].keys() if k != "time"]
+                            
+                            self.response_data["layout"] = {
+                                "title": "Transient Response", 
+                                "xaxis": "Time (s)", 
+                                "yaxis": "Voltage (V) / Current (A)"
+                            }
+                            
+                            for key in plot_keys:
+                                y_vals = [self.safe_num(step.get(key, 0.0)) for step in formatted_tran]
+                                self.response_data["plots"].append({
+                                    "name": f"{key}{suffix}", 
+                                    "x": t_vals, 
+                                    "y": y_vals, 
+                                    "type": "solid"
+                                })
 
                     elif atype == "ac":
                         if step_val == step_values[0]: self.log(f"--- .AC Analysis ---")
