@@ -1,0 +1,363 @@
+
+\documentclass[12pt,a4paper]{article}
+\usepackage[UTF8]{ctex}
+\usepackage{geometry}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{microtype}
+\sloppy
+\usepackage[normalem]{ulem}
+
+\geometry{margin=2.5cm}
+\setstretch{1.28}
+\setCJKmainfont{Noto Serif CJK TC}
+\setmainfont{Times New Roman}
+
+\title{NextSPICE 核心原理導論\\\large（MNA、非線性模型與暫態分析）}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{總覽：我們在做什麼？}
+
+本專案的目標是實作一個簡化版 SPICE 電路模擬器，其核心任務包括：
+
+\begin{itemize}
+\item 將電路轉換為線性方程組
+\item 求解節點電壓與支路電流
+\item 支援 DC、AC、Transient 三種分析模式
+\end{itemize}
+
+整體流程可概括為：
+\[
+\text{Netlist} \rightarrow \text{Stamping} \rightarrow \text{Matrix Construction} \rightarrow \text{Solve}
+\]
+
+\section{Modified Nodal Analysis（MNA）}
+
+\subsection{基本觀念}
+
+MNA 的核心是建立矩陣方程：
+\[
+A x = b
+\]
+
+其中：
+\begin{itemize}
+\item $x$：未知數向量，包含節點電壓與額外支路變數
+\item $A$：系統矩陣，通常是導納矩陣與約束方程的組合
+\item $b$：來源向量，包含獨立電流源與獨立電壓源的影響
+\end{itemize}
+
+相較於純節點分析，MNA 的優點是它可以自然處理電壓源、電感、受控源等無法直接只靠節點導納表示的元件。
+
+\subsection{電阻器的 stamping}
+
+電阻器滿足歐姆定律：
+\[
+I = \frac{V}{R}
+\]
+
+若定義導納為
+\[
+G = \frac{1}{R}
+\]
+則一個接在節點 $n_1$ 與 $n_2$ 之間的電阻，其 stamping 為：
+\[
+\begin{aligned}
+A_{n_1,n_1} &\mathrel{+}= G \\
+A_{n_2,n_2} &\mathrel{+}= G \\
+A_{n_1,n_2} &\mathrel{-}= G \\
+A_{n_2,n_1} &\mathrel{-}= G
+\end{aligned}
+\]
+
+這反映了「流出一端的電流等於導納乘以兩端電壓差」。
+
+\subsection{電壓源為什麼需要額外變數？}
+
+理想電壓源會強制指定兩端電壓差，例如：
+\[
+V_{n_1} - V_{n_2} = V_s
+\]
+
+但它本身的電流並不是由端電壓唯一決定，因此不能直接寫成單純的導納形式。  
+所以在 MNA 中，會引入額外未知數 $I_v$，代表電壓源支路電流。
+
+因此未知向量擴充為：
+\[
+x =
+\begin{bmatrix}
+V \\
+I_v
+\end{bmatrix}
+\]
+
+對應的系統矩陣可寫成分塊形式：
+\[
+\begin{bmatrix}
+G & B \\
+C & D
+\end{bmatrix}
+\begin{bmatrix}
+V \\
+I_v
+\end{bmatrix}
+=
+\begin{bmatrix}
+I \\
+E
+\end{bmatrix}
+\]
+
+這就是你在程式中看到某些元件需要 \verb|extra_vars = 1| 的原因。
+
+\section{AC 分析：把微分變成代數}
+
+AC 小信號分析的關鍵想法，是把所有訊號假設為正弦穩態，再轉換到頻域。  
+在頻域中：
+\[
+\frac{d}{dt} \longrightarrow j\omega
+\]
+
+因此原本的微分方程會變成代數方程。
+
+\subsection{電容的頻域模型}
+
+電容的時域關係為：
+\[
+I = C \frac{dV}{dt}
+\]
+
+轉到頻域後：
+\[
+I = j\omega C V
+\]
+
+因此電容在 AC 分析中可視為一個複數導納：
+\[
+Y_C = j\omega C
+\]
+
+這就是為什麼在 AC stamping 中，電容可以直接蓋入矩陣，方式和電阻很像，只是導納變成複數。
+
+\subsection{電感的頻域模型}
+
+電感的時域關係為：
+\[
+V = L \frac{dI}{dt}
+\]
+
+轉到頻域後：
+\[
+V = j\omega L I
+\]
+
+因此電感的阻抗為：
+\[
+Z_L = j\omega L
+\]
+
+由於電感常透過額外支路電流變數處理，所以它在 MNA 中的 AC stamping 通常比電容稍微複雜，但核心仍是把微分關係變成複數阻抗關係。
+
+\section{Transient Analysis：把時間離散化}
+
+暫態分析的目標，是求出電路狀態如何隨時間演化。  
+與 AC 分析不同，Transient 分析不能直接把微分變成 $j\omega$，而是要在離散時間點上近似導數。
+
+核心想法是：
+\[
+\frac{dV}{dt} \rightarrow \text{數值近似}
+\]
+
+\subsection{Backward Euler}
+
+Backward Euler 是最基本、也最穩定的數值積分方法之一。  
+對導數做近似：
+\[
+\frac{dV}{dt} \approx \frac{V^n - V^{n-1}}{\Delta t}
+\]
+
+其中：
+\begin{itemize}
+\item $V^n$：目前時間步的電壓
+\item $V^{n-1}$：前一時間步的電壓
+\item $\Delta t$：時間步長
+\end{itemize}
+
+它的優點是穩定，但數值阻尼較大。
+
+\subsection{Trapezoidal Rule}
+
+Trapezoidal 方法可以看成對積分做梯形近似，準確度通常比 Backward Euler 更好。  
+在 companion model 中，常可整理成：
+\[
+\frac{dV}{dt} \approx \frac{2}{\Delta t}(V^n - V^{n-1}) - I^{n-1}
+\]
+
+它的優點是精度較高，但有時可能產生數值振盪。
+
+\subsection{Companion Model 的觀念}
+
+SPICE 的核心技巧之一，是把動態元件在每個時間步轉換為「等效線性元件 + 歷史源」。
+
+例如對電容而言，可以轉為：
+\begin{itemize}
+\item 一個等效導納 $G_{eq}$
+\item 一個歷史電流源 $I_{hist}$
+\end{itemize}
+
+例如在 trapezoidal 下：
+\[
+G_{eq} = \frac{2C}{\Delta t}
+\]
+
+因此每一個時間步，暫態分析其實都在解一個新的線性方程組，只是其中的等效參數會依賴上一時間步的歷史狀態。
+
+\section{非線性元件：為什麼需要 Newton-Raphson？}
+
+線性元件可以直接寫成：
+\[
+A x = b
+\]
+
+但像 diode、BJT 這類元件，其電流與電壓關係是非線性的，因此不能一次直接解出，只能透過疊代法逼近。
+
+\subsection{Diode 的 Shockley 方程}
+
+二極體電流關係為：
+\[
+I = I_s \left(e^{\frac{V}{nV_T}} - 1\right)
+\]
+
+其中：
+\begin{itemize}
+\item $I_s$：飽和電流
+\item $n$：理想因子
+\item $V_T$：熱電壓
+\end{itemize}
+
+這個指數關係意味著：當電壓稍微改變，電流可能劇烈變化，因此數值求解時必須非常小心。
+
+\subsection{Newton-Raphson 線性化}
+
+對於非線性函數，我們在某個工作點附近將它線性化。  
+若目前估計點為 $V_0$，則可寫成：
+\[
+I \approx I_0 + G (V - V_0)
+\]
+
+其中：
+\[
+G = \frac{dI}{dV}
+\]
+
+整理後可以寫成 Norton 等效形式：
+\[
+I = G V + I_{eq}
+\]
+其中
+\[
+I_{eq} = I_0 - G V_0
+\]
+
+這樣每一次 Newton 疊代，都能把非線性元件暫時視為線性元件，蓋入矩陣中求解。
+
+\subsection{為什麼要做 clamp？}
+
+如果直接使用二極體或 BJT 的原始電壓去計算指數項：
+\[
+e^{V/V_T}
+\]
+那麼只要電壓略大，數值就可能爆炸，導致：
+\begin{itemize}
+\item overflow
+\item Jacobian 過度陡峭
+\item Newton 疊代發散
+\end{itemize}
+
+因此 SPICE 常使用：
+\begin{itemize}
+\item 指數截斷
+\item 電壓步進限制（junction clamp）
+\item GMIN 導通補丁
+\end{itemize}
+
+來提高數值穩定性。
+
+\section{BJT：Ebers-Moll 的基本想法}
+
+BJT 可以視為兩個互相耦合的 PN junction，因此其行為可以由 Ebers-Moll 模型描述。
+
+定義正向與反向接面電流：
+\[
+I_f = I_s \left(e^{V_{BE}/V_T} - 1\right)
+\]
+\[
+I_r = I_s \left(e^{V_{BC}/V_T} - 1\right)
+\]
+
+再透過係數 $\alpha_f$ 與 $\alpha_r$ 分配到各端電流：
+\[
+I_C = \alpha_f I_f - I_r
+\]
+\[
+I_E = -I_f + \alpha_r I_r
+\]
+
+Base 電流則由電流守恆決定。  
+在數值求解時，這些關係同樣要經過線性化，最後形成一個 $3 \times 3$ 的小信號 Jacobian，蓋入整體矩陣中。
+
+\section{數值穩定技巧}
+
+\subsection{GMIN}
+
+當電路中存在浮接節點、理想短路、理想開路，或某些工作點附近矩陣接近奇異時，直接求解可能失敗。  
+因此常加入極小導納：
+\[
+G_{min} \approx 10^{-12}
+\]
+
+它不代表真實物理元件，而是一種數值正則化手段。
+
+\subsection{指數截斷}
+
+為避免計算：
+\[
+e^x
+\]
+時出現 overflow，常限制為：
+\[
+e^x \rightarrow e^{\min(x, 100)}
+\]
+
+這不是嚴格物理模型，而是數值保護。
+
+\subsection{Junction Clamp}
+
+Newton 法若一步跨太大，容易從一個合理工作點跳到完全不合理的位置。  
+因此會限制接面電壓的變化量，使疊代步伐更平滑，這就是二極體與 BJT 模型中 clamp 的意義。
+
+\section{總結}
+
+一個簡化版 SPICE 核心，實際上包含了幾個層次：
+
+\begin{enumerate}
+\item 用 MNA 建立統一的電路方程
+\item 對線性元件直接 stamping
+\item 對 AC 分析使用頻域模型
+\item 對 Transient 分析使用數值積分與 companion model
+\item 對非線性元件使用 Newton-Raphson 線性化
+\item 用數值穩定技巧避免矩陣奇異與疊代發散
+\end{enumerate}
+
+因此，雖然程式表面上只是一些 \verb|stamp()|、\verb|stamp_nonlinear()| 與 \verb|update_history()|，但背後其實對應的是一整套電路模擬的數學與數值分析方法。
+
+\end{document}

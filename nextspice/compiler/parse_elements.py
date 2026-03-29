@@ -107,7 +107,7 @@ def parse_element(item, circuit, diagnostics, eval_func):
                 "ctrl_source": tk[3].upper(), "gain": eval_func(tk[4])
             })
         elif prefix == 'D':
-            if len(tk) < 4: raise ValueError("D requires A, K nodes and model")
+            if len(tk) < 4: raise ValueError("D requires p, n nodes and model")
             circuit["elements"].append({
                 "type": "diode", "name": name,
                 "pins": {"p": norm_node(tk[1]), "n": norm_node(tk[2])},
@@ -121,6 +121,15 @@ def parse_element(item, circuit, diagnostics, eval_func):
             circuit["elements"].append({
                 "type": "subckt_call", "name": name,
                 "pins": pins, "subname": subname
+            })
+        elif prefix == 'Q':
+            if len(tk) < 5: raise ValueError("BJT requires C, B, E nodes and model")
+            circuit["elements"].append({
+                "type": "bjt", "name": name,
+                "collector": norm_node(tk[1]),
+                "base": norm_node(tk[2]),
+                "emitter": norm_node(tk[3]),
+                "model": tk[4].upper()
             })
         else:
             diagnostics.append({"line": ln, "severity": "WARNING", "message": f"Unsupported prefix '{prefix}' for {name}"})

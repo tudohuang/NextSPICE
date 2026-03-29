@@ -1,124 +1,133 @@
+# nextspice/runtime/measure.py
 import numpy as np
+import math
+from scipy.interpolate import interp1d
 
-class MeasureEngine:
+class PostProcessor:
     """
-    NextSPICE 數據萃取引擎 (v0.1)
-    專門處理 .MEASURE 語法，包含線性內插與邊界條件防護。
+    NextSPICE 後處理引擎
+    專門處理 .MEASURE, .FOUR 等基於 raw_data 的數據分析。
     """
-    def __init__(self, circuit, extra_var_map):
-        self.circuit = circuit
-        self.node_mgr = circuit.node_mgr
-        self.extra_var_map = extra_var_map
+    def __init__(self, circuit_json, raw_data, log_callback):
+        self.circuit_json = circuit_json
+        self.raw_data = raw_data
+        self.log = log_callback  # 呼叫 runner 傳進來的 log 函數
+        self.results = {}        # 存放算出來的數據，最後還給 runner
 
-    def _get_var_data(self, var_name, results):
-        """從解向量歷史中，把指定變數 (如 V(OUT) 或 I(V1)) 的數據抽出來"""
-        var_name = var_name.upper()
-        y_data = []
-        
-        if var_name.startswith("V(") and var_name.endswith(")"):
-            node = var_name[2:-1]
-            if node == "0":
-                return np.zeros(len(results))
-            idx = self.node_mgr.mapping.get(node)
-            if idx is None: return None
-            idx -= 1
-            for r in results:
-                if r["status"] == "SUCCESS": y_data.append(r["x"][idx])
-                
-        elif var_name.startswith("I(") and var_name.endswith(")"):
-            element_name = var_name[2:-1]
-            target_el = next((el for el in self.circuit.elements if el.name == element_name), None)
-            idx = self.extra_var_map.get(target_el)
-            if idx is None: return None
-            for r in results:
-                if r["status"] == "SUCCESS": y_data.append(r["x"][idx])
-        else:
-            return None
-            
-        return np.array(y_data)
+    def run_all(self):
+        """執行所有後處理分析"""
+        self.evaluate_measures()
+        self.evaluate_fourier()
+        return self.results
 
-    def _find_crossings(self, x_data, y_data, val, edge_type):
-        """核心演算法：線性內插尋找所有穿越點"""
-        crossings = []
-        for i in range(len(y_data) - 1):
-            y1, y2 = y_data[i], y_data[i+1]
-            x1, x2 = x_data[i], x_data[i+1]
-            
-            is_rise = (y1 < val <= y2)
-            is_fall = (y1 > val >= y2)
-            
-            if (edge_type == 'RISE' and is_rise) or \
-               (edge_type == 'FALL' and is_fall) or \
-               (edge_type == 'CROSS' and (is_rise or is_fall)):
-                
-                # 🚀 內插公式： fraction = (目標值 - 起點值) / 總高度差
-                if y2 == y1: continue
-                fraction = (val - y1) / (y2 - y1)
-                x_cross = x1 + fraction * (x2 - x1)
-                crossings.append(x_cross)
-                
-        return crossings
-
-    def _parse_trigger(self, args_list):
-        """將 TRIG V(IN) VAL=2.5 RISE=1 解析成條件字典"""
-        info = {"var": None, "val": 0.0, "edge": "CROSS", "count": 1}
-        if not args_list: return info
-        
-        info["var"] = args_list[0]
-        
-        for arg in args_list[1:]:
-            if "=" in arg:
-                k, v = arg.split("=")
-                k = k.upper()
-                if k == "VAL": info["val"] = float(v)
-                elif k == "RISE": info["edge"] = "RISE"; info["count"] = int(v)
-                elif k == "FALL": info["edge"] = "FALL"; info["count"] = int(v)
-                elif k == "CROSS": info["edge"] = "CROSS"; info["count"] = int(v)
-        return info
-
-    def evaluate_tran(self, measure_cmd, tran_results):
-        """執行單條 .MEASURE TRAN 指令"""
-        name = measure_cmd["name"]
-        args = measure_cmd["raw_args"]
-        
-        # 建立時間軸
-        x_data = np.array([r["time"] for r in tran_results if r["status"] == "SUCCESS"])
-        
+    def safe_num(self, val):
         try:
-            # 切割 TRIG 與 TARG 條件
-            trig_idx = args.index("TRIG")
-            targ_idx = args.index("TARG")
-            trig_args = args[trig_idx + 1 : targ_idx]
-            targ_args = args[targ_idx + 1 :]
-        except ValueError:
-            return {"name": name, "value": "FAILED", "msg": "目前僅支援 TRIG ... TARG 雙點測量語法"}
+            v = float(val)
+            return 0.0 if math.isnan(v) or math.isinf(v) else v
+        except:
+            return 0.0
 
-        trig_info = self._parse_trigger(trig_args)
-        targ_info = self._parse_trigger(targ_args)
+    def evaluate_measures(self):
+        measures = self.circuit_json.get("measures", [])
+        if not measures:
+            return
 
-        # 抽波形數據
-        y_trig = self._get_var_data(trig_info["var"], tran_results)
-        y_targ = self._get_var_data(targ_info["var"], tran_results)
+        self.log("--- .MEASURE Results ---")
+        for m in measures:
+            atype = m.get("analysis_type", "tran").lower()
+            name = m.get("name", "UNNAMED").upper()
+            op = m.get("operation", "MAX").upper()
+            target = m.get("target", "").upper()
 
-        if y_trig is None or y_targ is None:
-            return {"name": name, "value": "FAILED", "msg": "找不到指定的測量變數"}
+            if atype == 'tran' and self.raw_data.get("tran"):
+                data = self.raw_data["tran"][0]["data"] 
+                if not data or target not in data[0]:
+                    self.log(f"[ERR] .MEASURE 無法找到目標變數 {target}")
+                    continue
+                
+                vals = [step[target] for step in data]
+                res_val = 0.0
+                
+                try:
+                    if op == "MAX": res_val = max(vals)
+                    elif op == "MIN": res_val = min(vals)
+                    elif op == "PP": res_val = max(vals) - min(vals)
+                    elif op == "AVG": res_val = sum(vals) / len(vals)
+                    elif op == "RMS": res_val = math.sqrt(sum(v**2 for v in vals) / len(vals))
+                    else:
+                        self.log(f"[WARN] 尚未支援的測量操作: {op}")
+                        continue
+                        
+                    self.log(f"{name} ({op} of {target}): {res_val:.5e}")
+                    self.results[f"MEAS: {name}"] = self.safe_num(res_val)
+                    
+                except Exception as e:
+                    self.log(f"[ERR] 計算測量 {name} 失敗: {str(e)}")
 
-        # 尋找所有穿越點
-        trig_crossings = self._find_crossings(x_data, y_trig, trig_info["val"], trig_info["edge"])
-        targ_crossings = self._find_crossings(x_data, y_targ, targ_info["val"], targ_info["edge"])
+    def evaluate_fourier(self):
+        fourier_cmds = self.circuit_json.get("fourier", [])
+        if not fourier_cmds or not self.raw_data.get("tran"):
+            return
 
-        # 確保要求的次數存在
-        t1_idx = trig_info["count"] - 1
-        t2_idx = targ_info["count"] - 1
+        self.log("--- .FOUR Fourier Analysis ---")
+        data = self.raw_data["tran"][0]["data"]
+        t_vals = np.array([step["time"] for step in data])
+        
+        if len(t_vals) < 10:
+            self.log("[ERR] 暫態資料點過少，無法執行傅立葉轉換。")
+            return
 
-        if t1_idx >= len(trig_crossings):
-            return {"name": name, "value": "FAILED", "msg": f"TRIG 條件未能滿足 {trig_info['count']} 次"}
-        if t2_idx >= len(targ_crossings):
-            return {"name": name, "value": "FAILED", "msg": f"TARG 條件未能滿足 {targ_info['count']} 次"}
+        t_start, t_stop = t_vals[0], t_vals[-1]
+        sim_time = t_stop - t_start
+        num_points = max(len(t_vals), 4096)
+        t_uniform = np.linspace(t_start, t_stop, num_points)
+        dt = t_uniform[1] - t_uniform[0]
 
-        # 計算時間差
-        t1 = trig_crossings[t1_idx]
-        t2 = targ_crossings[t2_idx]
-        delay = t2 - t1
+        for cmd in fourier_cmds:
+            fund_freq = float(cmd.get("freq", 1000.0))
+            targets = cmd.get("targets", [])
+            
+            if 1.0 / sim_time > fund_freq:
+                self.log(f"[WARN] 模擬總時間太短，解析度不足以捕捉基頻 ({fund_freq}Hz)！")
 
-        return {"name": name, "value": delay, "msg": f"t1={t1:.3e}, t2={t2:.3e}"}
+            for target in targets:
+                if target not in data[0]:
+                    self.log(f"[ERR] .FOUR 找不到目標變數 {target}")
+                    continue
+
+                y_vals = np.array([step[target] for step in data])
+                
+                # 1. 插值重取樣
+                interp_func = interp1d(t_vals, y_vals, kind='cubic', fill_value="extrapolate")
+                y_uniform = interp_func(t_uniform)
+
+                # 2. FFT 計算
+                fft_y = np.fft.rfft(y_uniform)
+                fft_f = np.fft.rfftfreq(num_points, d=dt)
+                
+                mag = np.abs(fft_y) * 2.0 / num_points
+                mag[0] /= 2.0 
+                
+                self.log(f"Fourier analysis for {target}:")
+                self.log(f"  DC component = {mag[0]:.5e}")
+                
+                harmonics = []
+                for i in range(1, 10):
+                    target_f = fund_freq * i
+                    idx = (np.abs(fft_f - target_f)).argmin()
+                    h_mag = mag[idx]
+                    phase = np.angle(fft_y[idx], deg=True)
+                    harmonics.append((target_f, h_mag, phase))
+                    
+                    norm_mag = h_mag / harmonics[0][1] if harmonics[0][1] != 0 else 0
+                    self.log(f"  Harmonic {i:<2}: {target_f:<8.1f}Hz | Mag: {h_mag:.5e} | Norm: {norm_mag:.5f} | Phase: {phase:>7.2f}°")
+
+                # 3. THD 計算
+                v1 = harmonics[0][1]
+                if v1 > 0:
+                    sum_sq = sum([h[1]**2 for h in harmonics[1:]])
+                    thd = (math.sqrt(sum_sq) / v1) * 100.0
+                    self.log(f"  Total Harmonic Distortion (THD) = {thd:.4f} %")
+                    self.results[f"THD({target})"] = self.safe_num(thd)
+                else:
+                    self.log("  [WARN] 基頻振幅過小，無法計算 THD。")

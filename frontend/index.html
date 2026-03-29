@@ -2,904 +2,1600 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
-    <title>NextSPICE Industrial Studio</title>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
-    <style>
-        :root {
-            /* 更現代、更接近 VS Code 的色系 */
-            --bg-base: #1e1e1e;
-            --bg-panel: #252526;
-            --bg-sidebar: #181818;
-            --bg-menu: #333333;
-            --bg-tab-active: #1e1e1e;
-            --bg-tab-inactive: #2d2d2d;
-            --border: #3c3c3c;
-            --accent: #007acc;
-            --accent-hover: #005f9e;
-            --text-main: #cccccc;
-            --text-muted: #858585;
-            --console-info: #4FC1FF;
-            --console-err: #F48771;
-            --console-success: #89D185;
-            --console-warn: #CCA700;
-        }
+  <meta charset="UTF-8">
+  <title>vSPICE EDA Studio</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #0d1117;
+      --bg4: #1c2333;
+      --bdr: #30363d;
+      --acc: #00e0a0;
+      --acc2: #00b882;
+      --accg: rgba(0, 224, 160, .15);
+      --tx: #c9d1d9;
+      --txm: #6e7681;
+      --ci: #58a6ff;
+      --ce: #f85149;
+      --cs: #3fb950;
+      --cw: #d29922;
+      --grid: #1a2332
+    }
 
-        /* 自訂漂亮捲軸 */
-        ::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
-        }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box
+    }
 
-        ::-webkit-scrollbar-track {
-            background: var(--bg-base);
-        }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px
+    }
 
-        ::-webkit-scrollbar-thumb {
-            background: #424242;
-            border-radius: 5px;
-            border: 2px solid var(--bg-base);
-        }
+    ::-webkit-scrollbar-track {
+      background: var(--bg)
+    }
 
-        ::-webkit-scrollbar-thumb:hover {
-            background: #4f4f4f;
-        }
+    ::-webkit-scrollbar-thumb {
+      background: #30363d;
+      border-radius: 4px
+    }
 
-        body {
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-base);
-            color: var(--text-main);
-            overflow: hidden;
-        }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #484f58
+    }
 
-        /* Menu & Toolbar */
-        .menu-bar {
-            height: 35px;
-            background-color: var(--bg-menu);
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            font-size: 13px;
-            border-bottom: 1px solid var(--border);
-            flex-shrink: 0;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-            z-index: 10;
-        }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--tx);
+      overflow: hidden
+    }
 
-        .menu-item {
-            position: relative;
-            padding: 6px 12px;
-            cursor: pointer;
-            user-select: none;
-            border-radius: 4px;
-            transition: 0.2s;
-        }
+    body.no-select {
+      user-select: none
+    }
 
-        .menu-item:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: white;
-        }
+    body.col-resize,
+    body.col-resize * {
+      cursor: col-resize !important
+    }
 
-        .dropdown {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            background-color: var(--bg-panel);
-            border: 1px solid var(--border);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-            z-index: 1000;
-            min-width: 200px;
-            border-radius: 4px;
-            padding: 5px 0;
-        }
+    body.row-resize,
+    body.row-resize * {
+      cursor: row-resize !important
+    }
 
-        .menu-item:hover .dropdown {
-            display: block;
-        }
+    .topbar {
+      height: 38px;
+      background: var(--bg2);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--bdr);
+      flex-shrink: 0;
+      gap: 0
+    }
 
-        .drop-item {
-            padding: 8px 15px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-        }
+    .logo {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--acc);
+      margin-right: 16px;
+      letter-spacing: .5px;
+      display: flex;
+      align-items: center;
+      gap: 6px
+    }
 
-        .drop-item:hover {
-            background-color: var(--accent);
-            color: white;
-        }
+    .menu-item {
+      position: relative;
+      padding: 6px 10px;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 4px;
+      transition: .15s;
+      color: var(--txm)
+    }
 
-        .shortcut {
-            color: var(--text-muted);
-            font-size: 11px;
-        }
+    .menu-item:hover {
+      background: rgba(255, 255, 255, .06);
+      color: var(--tx)
+    }
 
-        .drop-item:hover .shortcut {
-            color: #dddddd;
-        }
+    .dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+      z-index: 1000;
+      min-width: 230px;
+      border-radius: 6px;
+      padding: 4px 0
+    }
 
-        .toolbar {
-            height: 40px;
-            background-color: var(--bg-panel);
-            display: flex;
-            align-items: center;
-            padding: 0 15px;
-            border-bottom: 1px solid var(--border);
-            gap: 10px;
-            flex-shrink: 0;
-        }
+    .menu-item:hover .dropdown {
+      display: block
+    }
 
-        .tool-btn {
-            background-color: transparent;
-            color: var(--text-main);
-            border: 1px solid transparent;
-            padding: 6px 12px;
-            font-size: 13px;
-            cursor: pointer;
-            outline: none;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            border-radius: 4px;
-            transition: all 0.2s ease;
-        }
+    .drop-item {
+      padding: 7px 14px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 3px;
+      margin: 0 4px
+    }
 
-        .tool-btn:hover {
-            background-color: rgba(255, 255, 255, 0.05);
-            border: 1px solid #555555;
-        }
+    .drop-item:hover {
+      background: var(--acc);
+      color: #000
+    }
 
-        .tool-btn.primary {
-            background-color: var(--accent);
-            color: #ffffff;
-            border: 1px solid var(--accent);
-        }
+    .drop-item:hover .shortcut {
+      color: #000
+    }
 
-        .tool-btn.primary:hover {
-            background-color: var(--accent-hover);
-            box-shadow: 0 0 8px rgba(0, 122, 204, 0.4);
-        }
+    .drop-sep {
+      height: 1px;
+      background: var(--bdr);
+      margin: 4px 8px
+    }
 
-        /* Layout */
-        .main-container {
-            display: flex;
-            flex: 1;
-            min-height: 0;
-        }
+    .shortcut {
+      color: var(--txm);
+      font-size: 11px
+    }
 
-        .panel-header {
-            background-color: var(--bg-panel);
-            color: var(--text-muted);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 8px 15px;
-            border-bottom: 1px solid var(--border);
-            user-select: none;
-            flex-shrink: 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: 600;
-        }
+    .toolbar {
+      height: 42px;
+      background: var(--bg2);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      border-bottom: 1px solid var(--bdr);
+      gap: 6px;
+      flex-shrink: 0
+    }
 
-        /* Sidebar */
-        .sidebar {
-            width: 240px;
-            background-color: var(--bg-sidebar);
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border);
-            flex-shrink: 0;
-        }
+    .tool-btn {
+      background: 0 0;
+      color: var(--tx);
+      border: 1px solid transparent;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      outline: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 4px;
+      transition: .2s
+    }
 
-        #file-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px 0;
-            margin: 0;
-            list-style: none;
-            font-size: 13px;
-        }
+    .tool-btn:hover {
+      background: rgba(255, 255, 255, .04);
+      border-color: var(--bdr)
+    }
 
-        .file-item {
-            padding: 6px 15px 6px 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            transition: 0.1s;
-        }
+    .tool-btn.run {
+      background: var(--acc);
+      color: #000;
+      border-color: var(--acc);
+      font-weight: 600
+    }
 
-        .file-item:hover {
-            background-color: #2a2d2e;
-        }
+    .tool-btn.run:hover {
+      background: var(--acc2);
+      box-shadow: 0 0 12px var(--accg)
+    }
 
-        .file-item.active {
-            background-color: #37373d;
-            color: white;
-            border-left: 3px solid var(--accent);
-            padding-left: 17px;
-        }
+    .tool-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--bdr);
+      margin: 0 4px
+    }
 
-        .file-icon {
-            color: #519aba;
-            font-size: 14px;
-        }
+    .atag {
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid var(--bdr);
+      color: var(--txm)
+    }
 
-        /* VS Code Blue for files */
+    .main {
+      display: flex;
+      flex: 1;
+      min-height: 0
+    }
 
-        /* Center Column */
-        .center-col {
-            width: 45%;
-            display: flex;
-            flex-direction: column;
-            border-right: 1px solid var(--border);
-            min-width: 0;
-        }
+    .nav-rail {
+      width: 44px;
+      background: var(--bg2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 6px 0;
+      flex-shrink: 0;
+      border-right: 1px solid var(--bdr);
+      gap: 2px
+    }
 
-        /* 🚀 Tabs System */
-        .tabs-container {
-            display: flex;
-            background-color: var(--bg-panel);
-            border-bottom: 1px solid var(--border);
-            overflow-x: auto;
-            flex-shrink: 0;
-        }
+    .nav-btn {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      color: var(--txm);
+      cursor: pointer;
+      border-radius: 6px;
+      transition: .15s;
+      border: 1px solid transparent
+    }
 
-        .tab {
-            padding: 8px 15px;
-            font-size: 13px;
-            cursor: pointer;
-            border-right: 1px solid var(--border);
-            background-color: var(--bg-tab-inactive);
-            color: var(--text-muted);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            min-width: 100px;
-        }
+    .nav-btn:hover {
+      color: var(--tx);
+      background: rgba(255, 255, 255, .04)
+    }
 
-        .tab:hover {
-            background-color: var(--bg-base);
-        }
+    .nav-btn.active {
+      color: var(--acc);
+      background: var(--accg);
+      border-color: rgba(0, 224, 160, .2)
+    }
 
-        .tab.active {
-            background-color: var(--bg-base);
-            color: #fff;
-            border-top: 2px solid var(--accent);
-        }
+    .nav-spacer {
+      flex: 1
+    }
 
-        .tab-close {
-            margin-left: auto;
-            font-size: 10px;
-            border-radius: 3px;
-            padding: 2px 4px;
-        }
+    .sidebar {
+      flex: 0 0 220px;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      min-width: 80px;
+      overflow: hidden;
+      border-right: 1px solid var(--bdr)
+    }
 
-        .tab-close:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-            color: #F48771;
-        }
+    .sidebar.hidden {
+      display: none
+    }
 
-        #editor-container {
-            flex: 1;
-            min-height: 0;
-            position: relative;
-            background-color: var(--bg-base);
-        }
+    .sidebar.drag-over {
+      outline: 2px dashed var(--acc);
+      outline-offset: -2px
+    }
 
-        #editor {
-            position: absolute;
-            inset: 0;
-        }
+    .phd {
+      padding: 10px 14px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--txm);
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--bdr)
+    }
 
-        .terminal-wrapper {
-            height: 220px;
-            display: flex;
-            flex-direction: column;
-            border-top: 1px solid var(--border);
-            background-color: var(--bg-base);
-            flex-shrink: 0;
-        }
+    #flist {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+      margin: 0;
+      list-style: none;
+      font-size: 13px
+    }
 
-        #console-output {
-            flex: 1;
-            padding: 10px 15px 0 15px;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 13px;
-            overflow-y: auto;
-            color: var(--text-main);
-            line-height: 1.5;
-        }
+    .fi {
+      padding: 5px 12px 5px 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: .1s;
+      border-radius: 4px;
+      margin: 1px 4px
+    }
 
-        .term-input-row {
-            display: flex;
-            padding: 8px 15px 12px 15px;
-            align-items: center;
-            font-family: 'Consolas', monospace;
-            font-size: 13px;
-        }
+    .fi:hover {
+      background: rgba(255, 255, 255, .04)
+    }
 
-        .prompt {
-            color: var(--console-success);
-            margin-right: 10px;
-            font-weight: bold;
-        }
+    .fi.active {
+      background: var(--accg);
+      color: var(--acc)
+    }
 
-        #cmd-input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: white;
-            font-family: inherit;
-            font-size: inherit;
-            outline: none;
-        }
+    .fi i {
+      color: var(--ci);
+      font-size: 13px
+    }
 
-        /* Right Column */
-        .right-col {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            background-color: var(--bg-base);
-            min-width: 0;
-        }
+    .gutter {
+      flex-shrink: 0;
+      background: transparent;
+      z-index: 5;
+      transition: background .15s
+    }
 
-        .plot-wrapper {
-            flex: 1;
-            position: relative;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #1a1a1a;
-        }
+    .gutter:hover,
+    .gutter.on {
+      background: var(--acc)
+    }
 
-        /* 稍微加深圖表背景 */
-        #plot-area {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+    .gutter-h {
+      width: 3px;
+      cursor: col-resize
+    }
 
-        .empty-state {
-            color: var(--text-muted);
-            font-size: 14px;
-            user-select: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-        }
+    .gutter-v {
+      height: 3px;
+      cursor: row-resize
+    }
 
-        .empty-state i {
-            font-size: 40px;
-            color: #3c3c3c;
-        }
+    .center {
+      flex: 0 0 44%;
+      display: flex;
+      flex-direction: column;
+      min-width: 200px;
+      overflow: hidden
+    }
 
-        /* Data Grid */
-        .table-container {
-            width: 100%;
-            height: 100%;
-            overflow-y: auto;
-            padding: 20px;
-            box-sizing: border-box;
-            background-color: var(--bg-base);
-        }
+    .tabs {
+      display: flex;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--bdr);
+      overflow-x: auto;
+      flex-shrink: 0;
+      min-height: 33px
+    }
 
-        .op-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-family: 'Consolas', monospace;
-            font-size: 13px;
-            color: #cccccc;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
+    .tab {
+      padding: 7px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-right: 1px solid var(--bdr);
+      background: var(--bg2);
+      color: var(--txm);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 70px;
+      white-space: nowrap;
+      transition: .1s
+    }
 
-        .op-table th {
-            background-color: #2d2d2d;
-            color: #4FC1FF;
-            text-align: left;
-            padding: 12px 15px;
-            border-bottom: 2px solid var(--accent);
-            position: sticky;
-            top: 0;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        }
+    .tab:hover,
+    .tab.active {
+      background: var(--bg)
+    }
 
-        .op-table td {
-            padding: 10px 15px;
-            border-bottom: 1px solid #333;
-        }
+    .tab.active {
+      color: var(--acc);
+      border-bottom: 2px solid var(--acc)
+    }
 
-        .op-table tr:hover {
-            background-color: #2a2d2e;
-        }
+    .tab.dt {
+      border-left: 2px solid var(--ci)
+    }
 
-        .val-positive {
-            color: var(--console-success);
-            font-weight: bold;
-        }
+    .tab .dot {
+      color: var(--cw);
+      font-size: 16px;
+      line-height: 1
+    }
 
-        .val-negative {
-            color: var(--console-err);
-            font-weight: bold;
-        }
+    .tx {
+      margin-left: auto;
+      font-size: 9px;
+      border-radius: 3px;
+      padding: 2px 4px;
+      opacity: 0;
+      transition: .1s
+    }
 
-        .val-zero {
-            color: var(--text-muted);
-        }
+    .tab:hover .tx,
+    .tab.active .tx {
+      opacity: 1
+    }
 
-        /* Status Bar */
-        .status-bar {
-            height: 24px;
-            background-color: var(--accent);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 15px;
-            font-size: 12px;
-            color: #ffffff;
-            flex-shrink: 0;
-            font-weight: 500;
-        }
+    .tx:hover {
+      background: rgba(255, 255, 255, .1);
+      color: var(--ce)
+    }
 
-        .status-group {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
+    #ew {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+      background: var(--bg)
+    }
 
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            cursor: pointer;
-            padding: 0 5px;
-            border-radius: 3px;
-        }
+    #editor {
+      position: absolute;
+      inset: 0
+    }
 
-        .status-item:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
+    .welcome {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: var(--txm);
+      user-select: none
+    }
 
-        #folder-input {
-            display: none;
-        }
-    </style>
+    .welcome h2 {
+      font-size: 22px;
+      color: var(--acc);
+      font-weight: 300;
+      margin: 0;
+      letter-spacing: 1px
+    }
+
+    .welcome p {
+      font-size: 13px;
+      margin: 0
+    }
+
+    .welcome .keys {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 5px 20px;
+      font-size: 12px;
+      margin-top: 8px
+    }
+
+    .welcome kbd {
+      background: var(--bg2);
+      padding: 2px 7px;
+      border-radius: 3px;
+      font-family: inherit;
+      font-size: 11px;
+      color: var(--tx);
+      border: 1px solid var(--bdr)
+    }
+
+    .term {
+      flex: 0 0 180px;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      min-height: 40px;
+      overflow: hidden;
+      border-top: 1px solid var(--bdr)
+    }
+
+    .term.hidden {
+      display: none
+    }
+
+    #con {
+      flex: 1;
+      padding: 8px 14px 0;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 12px;
+      overflow-y: auto;
+      color: var(--tx);
+      line-height: 1.5
+    }
+
+    .ti {
+      display: flex;
+      padding: 6px 14px 10px;
+      align-items: center;
+      font-family: Consolas, monospace;
+      font-size: 12px
+    }
+
+    .pr {
+      color: var(--acc);
+      margin-right: 8px;
+      font-weight: 700
+    }
+
+    #cmd {
+      flex: 1;
+      background: 0 0;
+      border: 0;
+      color: #fff;
+      font-family: inherit;
+      font-size: inherit;
+      outline: 0
+    }
+
+    .right {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      min-width: 200px;
+      overflow: hidden;
+      border-left: 1px solid var(--bdr)
+    }
+
+    .pw {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: var(--grid)
+    }
+
+    #pa {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center
+    }
+
+    .es {
+      color: var(--txm);
+      font-size: 13px;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px
+    }
+
+    .es i {
+      font-size: 36px;
+      color: #1a2332
+    }
+
+    .tw {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 16px;
+      background: var(--bg)
+    }
+
+    .ot {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      color: var(--tx)
+    }
+
+    .ot th {
+      background: var(--bg2);
+      color: var(--acc);
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--acc);
+      position: sticky;
+      top: 0;
+      font-weight: 600
+    }
+
+    .ot td {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--bdr)
+    }
+
+    .ot tr:hover {
+      background: rgba(0, 224, 160, .04)
+    }
+
+    .vp {
+      color: var(--cs);
+      font-weight: 600
+    }
+
+    .vn {
+      color: var(--ce);
+      font-weight: 600
+    }
+
+    .vz {
+      color: var(--txm)
+    }
+
+    .ctx {
+      position: fixed;
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+      z-index: 2000;
+      min-width: 190px;
+      border-radius: 6px;
+      padding: 4px 0;
+      font-size: 13px
+    }
+
+    .ci {
+      padding: 6px 14px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 3px;
+      margin: 0 4px
+    }
+
+    .ci:hover {
+      background: var(--acc);
+      color: #000
+    }
+
+    .ci:hover .shortcut {
+      color: #000
+    }
+
+    .cs2 {
+      height: 1px;
+      background: var(--bdr);
+      margin: 4px 0
+    }
+
+    .pov {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .45);
+      z-index: 3000;
+      display: flex;
+      justify-content: center;
+      padding-top: 70px
+    }
+
+    .pal {
+      width: 480px;
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      border-radius: 8px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .5);
+      overflow: hidden;
+      max-height: 320px;
+      display: flex;
+      flex-direction: column
+    }
+
+    .pal input {
+      width: 100%;
+      padding: 11px 14px;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--tx);
+      border: 0;
+      outline: 0;
+      border-bottom: 1px solid var(--bdr);
+      font-family: inherit
+    }
+
+    .pl {
+      overflow-y: auto;
+      flex: 1
+    }
+
+    .pi {
+      padding: 7px 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px
+    }
+
+    .pi:hover,
+    .pi.s {
+      background: var(--acc);
+      color: #000
+    }
+
+    .pi i {
+      width: 18px;
+      text-align: center;
+      color: var(--txm)
+    }
+
+    .pi:hover i,
+    .pi.s i {
+      color: #000
+    }
+
+    .pi .pk {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--txm)
+    }
+
+    .pi:hover .pk,
+    .pi.s .pk {
+      color: #000
+    }
+
+    .toasts {
+      position: fixed;
+      bottom: 36px;
+      right: 16px;
+      z-index: 5000;
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 6px
+    }
+
+    .toast {
+      padding: 9px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
+      animation: ti .25s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-left: 3px solid
+    }
+
+    .toast.info {
+      background: #1a3a5c;
+      border-color: var(--ci)
+    }
+
+    .toast.success {
+      background: #1a3d2a;
+      border-color: var(--cs)
+    }
+
+    .toast.error {
+      background: #3d1a1a;
+      border-color: var(--ce)
+    }
+
+    @keyframes ti {
+      from {
+        opacity: 0;
+        transform: translateY(16px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .toast.out {
+      animation: to .25s forwards
+    }
+
+    @keyframes to {
+      to {
+        opacity: 0;
+        transform: translateY(16px)
+      }
+    }
+
+    .sbar {
+      height: 24px;
+      background: var(--bg2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-size: 11px;
+      color: var(--txm);
+      flex-shrink: 0;
+      border-top: 1px solid var(--bdr)
+    }
+
+    .sg {
+      display: flex;
+      gap: 14px;
+      align-items: center
+    }
+
+    .si {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      padding: 0 4px;
+      border-radius: 3px
+    }
+
+    .si:hover {
+      background: rgba(255, 255, 255, .05)
+    }
+
+    #fi2 {
+      display: none
+    }
+
+    .ted {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .5);
+      z-index: 4000;
+      display: flex;
+      justify-content: center;
+      align-items: center
+    }
+
+    .ted-box {
+      background: var(--bg2);
+      border: 1px solid var(--bdr);
+      border-radius: 10px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, .6);
+      width: 520px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    .ted-hdr {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--bdr);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--acc)
+    }
+
+    .ted-hdr span:last-child {
+      cursor: pointer;
+      color: var(--txm);
+      font-size: 16px
+    }
+
+    .ted-hdr span:last-child:hover {
+      color: var(--ce)
+    }
+
+    .ted-body {
+      padding: 14px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px
+    }
+
+    .ted-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px
+    }
+
+    .ted-row label {
+      width: 110px;
+      color: var(--txm);
+      flex-shrink: 0;
+      text-align: right
+    }
+
+    .ted-row input[type=color] {
+      width: 32px;
+      height: 26px;
+      border: 1px solid var(--bdr);
+      border-radius: 4px;
+      background: var(--bg);
+      cursor: pointer;
+      padding: 0
+    }
+
+    .ted-row input[type=color]::-webkit-color-swatch-wrapper {
+      padding: 2px
+    }
+
+    .ted-row input[type=color]::-webkit-color-swatch {
+      border: none;
+      border-radius: 2px
+    }
+
+    .ted-row input[type=text] {
+      width: 80px;
+      background: var(--bg);
+      border: 1px solid var(--bdr);
+      border-radius: 4px;
+      padding: 4px 6px;
+      color: var(--tx);
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      outline: 0
+    }
+
+    .ted-row input[type=text]:focus {
+      border-color: var(--acc)
+    }
+
+    .ted-sep {
+      height: 1px;
+      background: var(--bdr);
+      margin: 4px 0
+    }
+
+    .ted-sec {
+      font-size: 11px;
+      color: var(--acc);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      font-weight: 600;
+      padding: 4px 0
+    }
+
+    .ted-foot {
+      padding: 12px 18px;
+      border-top: 1px solid var(--bdr);
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end
+    }
+
+    .ted-foot button {
+      padding: 6px 16px;
+      border-radius: 5px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid var(--bdr);
+      font-family: inherit;
+      transition: .15s
+    }
+
+    .ted-foot .ted-save {
+      background: var(--acc);
+      color: #000;
+      border-color: var(--acc);
+      font-weight: 600
+    }
+
+    .ted-foot .ted-save:hover {
+      opacity: .85
+    }
+
+    .ted-foot .ted-del {
+      background: transparent;
+      color: var(--ce);
+      border-color: var(--ce)
+    }
+
+    .ted-foot .ted-del:hover {
+      background: var(--ce);
+      color: #fff
+    }
+
+    .ted-foot .ted-cancel {
+      background: transparent;
+      color: var(--txm)
+    }
+
+    .ted-foot .ted-cancel:hover {
+      background: rgba(255, 255, 255, .05);
+      color: var(--tx)
+    }
+
+    .ted-name {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--bdr);
+      border-radius: 4px;
+      padding: 7px 10px;
+      color: var(--tx);
+      font-size: 13px;
+      outline: 0;
+      font-family: inherit
+    }
+
+    .ted-name:focus {
+      border-color: var(--acc)
+    }
+
+    .ted-preview {
+      height: 40px;
+      border-radius: 6px;
+      border: 1px solid var(--bdr);
+      display: flex;
+      overflow: hidden;
+      margin: 4px 0
+    }
+
+    .ted-preview div {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #fff;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, .5)
+    }
+  </style>
 </head>
 
 <body>
-    <input type="file" id="folder-input" webkitdirectory directory multiple onchange="loadWorkspace(event)">
-
-    <div class="menu-bar">
-        <div class="menu-item">File
-            <div class="dropdown">
-                <div class="drop-item" onclick="createNewFile()"><i class="fa-solid fa-file-circle-plus"></i> New
-                    File... <span class="shortcut">Ctrl+N</span></div>
-
-                <div class="drop-item" onclick="document.getElementById('folder-input').click()"><i
-                        class="fa-regular fa-folder-open"></i> Open Workspace... <span class="shortcut"></span></div>
-                <div class="drop-item" onclick="runSimulation()"><i class="fa-solid fa-play"></i> Run Simulation <span
-                        class="shortcut">F5</span></div>
-                <div class="drop-item" onclick="exportCSV()"><i class="fa-solid fa-file-csv"></i> Export CSV <span
-                        class="shortcut"></span></div>
-            </div>
-        </div>
-        <div class="menu-item">Edit
-            <div class="dropdown">
-                <div class="drop-item" onclick="if(window.editor) window.editor.setValue('')"><i
-                        class="fa-solid fa-eraser"></i> Clear Editor</div>
-                <div class="drop-item" onclick="formatCode()"><i class="fa-solid fa-wand-magic-sparkles"></i> Format
-                    Code <span class="shortcut">Alt+Shift+F</span></div>
-            </div>
-        </div>
-        <div class="menu-item">View
-            <div class="dropdown">
-                <div class="drop-item" onclick="document.getElementById('console-output').innerHTML=''">Clear Console
-                </div>
-            </div>
-        </div>
+  <input type="file" id="fi2" webkitdirectory directory multiple>
+  <div class="topbar">
+    <div class="logo"><i class="fa-solid fa-bolt"></i>vSPICE</div>
+    <div class="menu-item">File<div class="dropdown">
+        <div class="drop-item" onclick="newFile()">New File <span class="shortcut">Ctrl+N</span></div>
+        <div class="drop-item" onclick="Q('fi2').click()">Open Workspace <span class="shortcut">Ctrl+O</span></div>
+        <div class="drop-item" onclick="saveFile()">Save <span class="shortcut">Ctrl+S</span></div>
+        <div class="drop-sep"></div>
+        <div class="drop-item" onclick="runSim()">Simulate <span class="shortcut">F5</span></div>
+        <div class="drop-item" onclick="fmtCode()">Format <span class="shortcut">Alt+Shift+F</span></div>
+        <div class="drop-sep"></div>
+        <div class="drop-item" onclick="exportCSV()">Export CSV</div>
+      </div>
     </div>
-
-    <div class="toolbar">
-        <button class="tool-btn primary" onclick="runSimulation()"><i class="fa-solid fa-play"></i> Run
-            Simulation</button>
-        <button class="tool-btn" onclick="formatCode()"><i class="fa-solid fa-align-left"></i> Format</button>
-        <button class="tool-btn" onclick="exportCSV()"><i class="fa-solid fa-download"></i> Export Data</button>
-        <div style="flex:1;"></div>
-        <span style="color: var(--text-muted); font-size: 12px;"><i class="fa-solid fa-microchip"></i> NextSPICE Engine
-            v1.4</span>
+    <div class="menu-item">Edit<div class="dropdown">
+        <div class="drop-item" onclick="if(E)E.setValue('')">Clear Editor</div>
+        <div class="drop-item" onclick="fmtCode()">Format Code <span class="shortcut">Alt+Shift+F</span></div>
+      </div>
     </div>
-
-    <div class="main-container">
-        <div class="sidebar">
-            <div class="panel-header">
-                <span>EXPLORER</span>
-                <span style="cursor:pointer;" onclick="document.getElementById('folder-input').click()"
-                    title="Open Folder"><i class="fa-solid fa-folder-plus"></i></span>
-            </div>
-            <ul id="file-list">
-                <li
-                    style="padding: 20px; color:var(--text-muted); font-size:12px; text-align:center; line-height: 1.6;">
-                    <i class="fa-regular fa-folder-open" style="font-size: 24px; margin-bottom: 10px;"></i><br>
-                    Click the icon above to open a folder.
-                </li>
-            </ul>
-        </div>
-
-        <div class="center-col">
-            <div class="tabs-container" id="tabs-bar">
-                <div class="tab active" id="tab-untitled"><i class="fa-solid fa-file-lines file-icon"></i> untitled.cir
-                </div>
-            </div>
-
-            <div id="editor-container">
-                <div id="editor"></div>
-            </div>
-
-            <div class="terminal-wrapper">
-                <div class="panel-header"><span><i class="fa-solid fa-terminal"></i> Terminal</span></div>
-                <div id="console-output"><span style="color: var(--console-info);">[INFO] NextSPICE v1.4 Engine
-                        Ready.</span><br></div>
-                <div class="term-input-row">
-                    <span class="prompt">PS C:\NextSPICE></span>
-                    <input type="text" id="cmd-input" autocomplete="off" spellcheck="false"
-                        onkeydown="handleTerminal(event)">
-                </div>
-            </div>
-        </div>
-
-        <div class="right-col">
-            <div class="panel-header"><span id="viewer-header"><i class="fa-solid fa-chart-line"></i> Waveform
-                    Viewer</span></div>
-            <div class="plot-wrapper">
-                <div id="plot-area">
-                    <div class="empty-state">
-                        <i class="fa-solid fa-chart-area"></i>
-                        No simulation data. Click "Run Simulation".
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="menu-item">View<div class="dropdown">
+        <div class="drop-item" onclick="toggleSB()">Toggle Sidebar <span class="shortcut">Ctrl+B</span></div>
+        <div class="drop-item" onclick="toggleTerm()">Toggle Terminal <span class="shortcut">Ctrl+`</span></div>
+        <div class="drop-item" onclick="openPal()">Command Palette <span class="shortcut">Ctrl+Shift+P</span></div>
+        <div class="drop-sep"></div>
+        <div class="drop-item" onclick="zoomIn()">Zoom In <span class="shortcut">Ctrl+=</span></div>
+        <div class="drop-item" onclick="zoomOut()">Zoom Out <span class="shortcut">Ctrl+-</span></div>
+        <div class="drop-item" onclick="zoomReset()">Reset Zoom</div>
+        <div class="drop-sep"></div>
+        <div class="drop-item" onclick="cycleTheme()">Next Theme <span class="shortcut">Ctrl+T</span></div>
+        <div class="drop-item" onclick="openThemeEditor()">Custom Theme Editor</div>
+        <div class="drop-item" onclick="Q('con').innerHTML=''">Clear Console</div>
+      </div>
     </div>
-
-    <div class="status-bar">
-        <div class="status-group">
-            <span id="status-text"><i class="fa-solid fa-check-circle"></i> Ready</span>
-        </div>
-        <div class="status-group">
-            <div class="status-item" id="cursor-pos">Ln 1, Col 1</div>
-            <div class="status-item">UTF-8</div>
-            <div class="status-item">SPICE</div>
-        </div>
+  </div>
+  <div class="toolbar">
+    <button class="tool-btn run" onclick="runSim()"><i class="fa-solid fa-play"></i> Simulate</button>
+    <div class="tool-sep"></div>
+    <button class="tool-btn" onclick="fmtCode()"><i class="fa-solid fa-align-left"></i> Format</button>
+    <button class="tool-btn" onclick="saveFile()"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+    <button class="tool-btn" onclick="exportCSV()"><i class="fa-solid fa-download"></i> Export</button>
+    <div class="tool-sep"></div>
+    <span class="atag" id="atag">.OP</span>
+    <div style="flex:1"></div>
+    <button class="tool-btn" onclick="cycleTheme()" title="Switch Theme"><i class="fa-solid fa-palette"></i></button>
+    <button class="tool-btn" onclick="openThemeEditor()" title="Custom Theme Editor"><i
+        class="fa-solid fa-swatchbook"></i></button>
+    <button class="tool-btn" onclick="zoomOut()" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+    <span id="zoomLbl" style="color:var(--txm);font-size:11px;min-width:32px;text-align:center">14px</span>
+    <button class="tool-btn" onclick="zoomIn()" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+    <div class="tool-sep"></div>
+    <span id="themeLbl" style="color:var(--txm);font-size:11px"><i class="fa-solid fa-circle"
+        style="color:var(--acc);font-size:8px"></i> Oscilloscope</span>
+  </div>
+  <div class="main">
+    <div class="nav-rail">
+      <div class="nav-btn active" title="Explorer" onclick="toggleSB()"><i class="fa-solid fa-folder-tree"></i></div>
+      <div class="nav-btn" title="Components" onclick="toast('Component browser — coming soon','info')"><i
+          class="fa-solid fa-microchip"></i></div>
+      <div class="nav-btn" title="Waveforms" onclick="toast('Waveform manager — coming soon','info')"><i
+          class="fa-solid fa-wave-square"></i></div>
+      <div class="nav-btn" title="Simulate" onclick="runSim()"><i class="fa-solid fa-flask-vial"></i></div>
+      <div class="nav-spacer"></div>
+      <div class="nav-btn" title="Commands" onclick="openPal()"><i class="fa-solid fa-terminal"></i></div>
     </div>
+    <div class="sidebar" id="sb">
+      <div class="phd"><span>Explorer</span><span style="cursor:pointer" onclick="Q('fi2').click()"><i
+            class="fa-solid fa-folder-plus"></i></span></div>
+      <ul id="flist"></ul>
+    </div>
+    <div class="gutter gutter-h" id="gsb"></div>
+    <div class="center" id="center">
+      <div class="tabs" id="tbar"></div>
+      <div id="ew">
+        <div id="editor"></div>
+        <div class="welcome" id="wel"><i class="fa-solid fa-bolt"
+            style="font-size:42px;color:var(--acc);opacity:.3"></i>
+          <h2>vSPICE EDA</h2>
+          <p>Circuit simulation, reimagined.</p>
+          <div class="keys"><span>New File</span><kbd>Ctrl+N</kbd><span>Simulate</span><kbd>F5</kbd><span>Command
+              Palette</span><kbd>Ctrl+Shift+P</kbd><span>Switch Theme</span><kbd>Ctrl+T</kbd></div>
+        </div>
+      </div>
+      <div class="gutter gutter-v" id="gt"></div>
+      <div class="term" id="term">
+        <div class="phd"><span><i class="fa-solid fa-terminal"></i> Output</span><span style="cursor:pointer"
+            onclick="toggleTerm()"><i class="fa-solid fa-xmark"></i></span></div>
+        <div id="con"><span style="color:var(--acc)">[vSPICE] Engine ready. Type <b>help</b> for commands.</span><br>
+        </div>
+        <div class="ti"><span class="pr">▶</span><input type="text" id="cmd" autocomplete="off" spellcheck="false"
+            placeholder="help, run, info, elements, version, theme, clear"></div>
+      </div>
+    </div>
+    <div class="gutter gutter-h" id="grt"></div>
+    <div class="right" id="right">
+      <div class="phd"><span id="vhdr"><i class="fa-solid fa-wave-square"></i> Waveform Viewer</span></div>
+      <div class="pw">
+        <div id="pa">
+          <div class="es"><i class="fa-solid fa-wave-square"></i>Run a simulation to see waveforms.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sbar" id="sbar">
+    <div class="sg"><span id="stxt" style="color:var(--acc)"><i class="fa-solid fa-circle" style="font-size:8px"></i>
+        Ready</span><span id="sinfo"></span></div>
+    <div class="sg">
+      <div class="si" id="cpos">Ln 1, Col 1</div>
+      <div class="si">SPICE</div>
+    </div>
+  </div>
+  <div class="toasts" id="toasts"></div>
+  <script>
+    const Q = id => document.getElementById(id), con = Q('con');
+    //let E = null, files = {}, tabs = [], active = null, tabN = 0, lastP = null, lastX = '', fontSize = 14;
+    let E = null, files = {}, tabs = [], active = null, tabN = 0, lastP = null, lastX = '', fontSize = 14, globalSimResult = null;
+    function hex2rgba(h, a) { const n = parseInt(h.replace('#', ''), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})` }
 
-    <script>
-        // --- 核心變數 ---
-        const consoleOut = document.getElementById('console-output');
-        const statusText = document.getElementById('status-text');
-        const viewerHeader = document.getElementById('viewer-header');
-        const cursorPos = document.getElementById('cursor-pos');
+    // ── Themes ──
+    const THEMES = [
+      { name: 'Oscilloscope', acc: '#00e0a0', acc2: '#00b882', bg: '#0d1117', bg2: '#161b22', bdr: '#30363d', tx: '#c9d1d9', txm: '#6e7681', grid: '#1a2332', ci: '#58a6ff', ce: '#f85149', cs: '#3fb950', cw: '#d29922', monaco: 'spice-dark', plotClr: ['#00ffcc', '#ff3366', '#ffcc00', '#cc66ff', '#3399ff', '#ff9500', '#00ccff'] },
+      { name: 'Midnight', acc: '#7c93ff', acc2: '#5b73e8', bg: '#0b0e1a', bg2: '#111528', bdr: '#252a40', tx: '#b8c0e0', txm: '#5a6080', grid: '#10132a', ci: '#6eaaff', ce: '#ff6b6b', cs: '#66d9a0', cw: '#e8b84d', monaco: 'spice-midnight', plotClr: ['#6eaaff', '#ff6b6b', '#e8b84d', '#b87fff', '#66d9a0', '#ff8c42', '#42c6ff'] },
+      { name: 'Amber', acc: '#ffb347', acc2: '#e09830', bg: '#1a1410', bg2: '#221c15', bdr: '#3a3228', tx: '#d4c8b8', txm: '#887860', grid: '#1e1812', ci: '#7cb8ff', ce: '#ff6666', cs: '#7dcc8a', cw: '#e8c44d', monaco: 'spice-amber', plotClr: ['#ffb347', '#ff6666', '#7cb8ff', '#cc99ff', '#7dcc8a', '#ff8855', '#44ccbb'] }
+    ];
+    let themeIdx = 0;
 
-        let workspaceFiles = { "untitled.cir": "* Try an OP Analysis!\nV1 IN 0 DC 12\nR1 IN MID 1k\nR2 MID 0 2k\n.OP\n.END" };
-        let activeFile = "untitled.cir";
-        let openTabs = ["untitled.cir"];
+    function applyTheme(idx) {
+      themeIdx = idx; const t = THEMES[idx], r = document.documentElement.style;
+      r.setProperty('--bg', t.bg); r.setProperty('--bg2', t.bg2); r.setProperty('--bdr', t.bdr); r.setProperty('--acc', t.acc); r.setProperty('--acc2', t.acc2);
+      r.setProperty('--accg', hex2rgba(t.acc, 0.15));
+      r.setProperty('--tx', t.tx); r.setProperty('--txm', t.txm); r.setProperty('--grid', t.grid); r.setProperty('--ci', t.ci); r.setProperty('--ce', t.ce); r.setProperty('--cs', t.cs); r.setProperty('--cw', t.cw);
+      Q('themeLbl').innerHTML = `<i class="fa-solid fa-circle" style="color:${t.acc};font-size:8px"></i> ${t.name}`;
+      if (E) monaco.editor.setTheme(t.monaco);
+      try { localStorage.setItem('nxs-theme', idx) } catch (_) { }
+    }
+    function cycleTheme() { applyTheme((themeIdx + 1) % THEMES.length); toast('<i class="fa-solid fa-palette"></i> ' + THEMES[themeIdx].name, 'info') }
 
-        // --- 編輯器初始化 ---
-        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-        require(['vs/editor/editor.main'], function () {
-            window.editor = monaco.editor.create(document.getElementById('editor'), {
-                value: workspaceFiles[activeFile],
-                language: 'ini',
-                theme: 'vs-dark',
-                automaticLayout: true,
-                fontSize: 14,
-                fontFamily: "'Consolas', 'Courier New', monospace",
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                padding: { top: 15, bottom: 15 },
-                renderLineHighlight: "all" // 高亮整行，更有質感
-            });
+    // ── Custom Theme Editor ──
+    const TFIELDS = [
+      { key: 'acc', label: 'Accent', sec: 'Core Colors' },
+      { key: 'acc2', label: 'Accent Hover' },
+      { key: 'bg', label: 'Background', sec: 'Surfaces' },
+      { key: 'bg2', label: 'Panel BG' },
+      { key: 'bdr', label: 'Border' },
+      { key: 'grid', label: 'Plot Grid' },
+      { key: 'tx', label: 'Text', sec: 'Text' },
+      { key: 'txm', label: 'Muted Text' },
+      { key: 'ci', label: 'Info / Blue', sec: 'Semantic' },
+      { key: 'ce', label: 'Error / Red' },
+      { key: 'cs', label: 'Success / Green' },
+      { key: 'cw', label: 'Warning / Yellow' },
+    ];
 
-            // 快捷鍵綁定
-            window.editor.addCommand(monaco.KeyCode.F5, function () { runSimulation(); });
-            window.editor.addCommand(monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, function () { formatCode(); });
+    function loadCustomThemes() {
+      try { const raw = localStorage.getItem('nxs-custom-themes'); if (raw) { const arr = JSON.parse(raw); arr.forEach(ct => { ct.monaco = 'spice-custom-' + ct.name.toLowerCase().replace(/\s+/g, '-'); ct.plotClr = ct.plotClr || [ct.acc, ct.ce, ct.cw, ct.ci, ct.cs, '#ff9500', '#00ccff']; if (!THEMES.find(t => t.name === ct.name)) THEMES.push(ct) }) } } catch (_) { }
+    }
+    function saveCustomThemes() {
+      try { const customs = THEMES.filter(t => t._custom); localStorage.setItem('nxs-custom-themes', JSON.stringify(customs)) } catch (_) { }
+    }
 
-            // 游標位置追蹤
-            window.editor.onDidChangeCursorPosition((e) => {
-                cursorPos.innerText = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
-            });
+    function openThemeEditor(editIdx) {
+      if (Q('ted-overlay')) return;
+      const isEdit = editIdx !== undefined && THEMES[editIdx] && THEMES[editIdx]._custom;
+      const base = isEdit ? THEMES[editIdx] : THEMES[themeIdx];
+      const ov = document.createElement('div'); ov.className = 'ted'; ov.id = 'ted-overlay';
+      let html = `<div class="ted-box"><div class="ted-hdr"><span><i class="fa-solid fa-palette"></i> ${isEdit ? 'Edit' : 'Create'} Custom Theme</span><span onclick="closeTE()"><i class="fa-solid fa-xmark"></i></span></div><div class="ted-body">`;
+      html += `<input class="ted-name" id="te-name" placeholder="Theme name..." value="${isEdit ? base.name : 'My Theme'}">`;
+      html += `<div class="ted-preview" id="te-prev"></div>`;
+      let lastSec = '';
+      TFIELDS.forEach(f => {
+        if (f.sec && f.sec !== lastSec) { lastSec = f.sec; html += `<div class="ted-sep"></div><div class="ted-sec">${f.sec}</div>` }
+        const v = base[f.key] || '#888888';
+        html += `<div class="ted-row"><label>${f.label}</label><input type="color" id="te-c-${f.key}" value="${v}" oninput="teSync('${f.key}')"><input type="text" id="te-t-${f.key}" value="${v}" oninput="teSyncT('${f.key}')"></div>`;
+      });
+      html += `<div class="ted-sep"></div><div class="ted-sec">Plot Trace Colors (comma-separated hex)</div>`;
+      html += `<div class="ted-row"><label>Traces</label><input type="text" id="te-plotclr" value="${(base.plotClr || []).join(',')}" style="width:280px"></div>`;
+      html += `</div><div class="ted-foot">`;
+      if (isEdit) html += `<button class="ted-del" onclick="deleteCustomTheme(${editIdx})"><i class="fa-solid fa-trash"></i> Delete</button>`;
+      html += `<button class="ted-cancel" onclick="closeTE()">Cancel</button>`;
+      html += `<button class="ted-save" onclick="saveTE(${isEdit ? editIdx : 'undefined'})"><i class="fa-solid fa-check"></i> ${isEdit ? 'Update' : 'Save'}</button>`;
+      html += `</div></div>`;
+      ov.innerHTML = html;
+      ov.onclick = e => { if (e.target === ov) closeTE() };
+      document.body.appendChild(ov);
+      updateTEPreview();
+    }
+    function closeTE() { const o = Q('ted-overlay'); if (o) o.remove() }
+    function teSync(key) { const c = Q('te-c-' + key), t = Q('te-t-' + key); if (c && t) { t.value = c.value; updateTEPreview() } }
+    function teSyncT(key) { const c = Q('te-c-' + key), t = Q('te-t-' + key); if (c && t && /^#[0-9a-f]{6}$/i.test(t.value)) { c.value = t.value; updateTEPreview() } }
+    function updateTEPreview() {
+      const p = Q('te-prev'); if (!p) return;
+      const bg = Q('te-c-bg')?.value || '#111'; const bg2 = Q('te-c-bg2')?.value || '#222'; const acc = Q('te-c-acc')?.value || '#0f0'; const tx = Q('te-c-tx')?.value || '#ccc'; const ci = Q('te-c-ci')?.value || '#58a6ff'; const ce = Q('te-c-ce')?.value || '#f00';
+      p.innerHTML = `<div style="background:${bg}">BG</div><div style="background:${bg2}">Panel</div><div style="background:${acc}">Acc</div><div style="background:${tx};color:#000">Text</div><div style="background:${ci}">Info</div><div style="background:${ce}">Err</div>`;
+    }
+    function saveTE(editIdx) {
+      const name = (Q('te-name')?.value || '').trim();
+      if (!name) { toast('Please enter a theme name', 'error'); return }
+      const t = { name, _custom: true };
+      TFIELDS.forEach(f => { t[f.key] = Q('te-t-' + f.key)?.value || Q('te-c-' + f.key)?.value || '#888888' });
+      const rawPlot = (Q('te-plotclr')?.value || '').split(',').map(s => s.trim()).filter(s => /^#[0-9a-f]{3,6}$/i.test(s));
+      t.plotClr = rawPlot.length ? rawPlot : [t.acc, t.ce, t.cw, t.ci, t.cs, '#ff9500', '#00ccff'];
+      t.monaco = 'spice-custom-' + name.toLowerCase().replace(/\s+/g, '-');
+      if (editIdx !== undefined && THEMES[editIdx]) { THEMES[editIdx] = t } else { THEMES.push(t) }
+      saveCustomThemes();
+      // Register Monaco theme if loaded
+      if (typeof monaco !== 'undefined') {
+        defTheme(t.monaco, t);
+      }
+      applyTheme(editIdx !== undefined ? editIdx : THEMES.length - 1);
+      closeTE();
+      toast('<i class="fa-solid fa-palette"></i> Theme "' + name + '" saved!', 'success');
+    }
+    function deleteCustomTheme(idx) {
+      if (!THEMES[idx] || !THEMES[idx]._custom) return;
+      const name = THEMES[idx].name; THEMES.splice(idx, 1); saveCustomThemes();
+      if (themeIdx >= THEMES.length) themeIdx = 0;
+      applyTheme(themeIdx); closeTE();
+      toast('Theme "' + name + '" deleted', 'info');
+    }
+    // defTheme needs to be accessible outside Monaco init
+    let defTheme = () => { };
+    loadCustomThemes();
 
-            // 檔案內容同步
-            window.editor.onDidChangeModelContent(() => {
-                workspaceFiles[activeFile] = window.editor.getValue();
-            });
-        });
+    // ── Font size ──
+    function zoomIn() { fontSize = Math.min(fontSize + 1, 24); applyFontSize() }
+    function zoomOut() { fontSize = Math.max(fontSize - 1, 10); applyFontSize() }
+    function zoomReset() { fontSize = 14; applyFontSize() }
+    function applyFontSize() { if (E) E.updateOptions({ fontSize }); Q('zoomLbl').textContent = fontSize + 'px'; try { localStorage.setItem('nxs-font', fontSize) } catch (_) { } }
 
-        // --- UI 輔助函數 ---
-        function appendLog(msg, type = "info") {
-            let color = "var(--text-main)";
-            let icon = "";
-            if (type === "error") { color = "var(--console-err)"; icon = "<i class='fa-solid fa-xmark'></i> "; }
-            else if (type === "warn") { color = "var(--console-warn)"; icon = "<i class='fa-solid fa-triangle-exclamation'></i> "; }
-            else if (type === "success") { color = "var(--console-success)"; icon = "<i class='fa-solid fa-check'></i> "; }
-            else if (type === "system") { color = "var(--console-info)"; }
+    function toast(m, t = 'info', d = 2500) { const e = document.createElement('div'); e.className = 'toast ' + t; e.innerHTML = m; Q('toasts').appendChild(e); setTimeout(() => { e.classList.add('out'); setTimeout(() => e.remove(), 250) }, d) }
+    function log(m, t = 'info') { const c = { error: 'var(--ce)', warn: 'var(--cw)', success: 'var(--cs)', system: 'var(--acc)' }; const ic = { error: '<i class="fa-solid fa-xmark"></i> ', warn: '<i class="fa-solid fa-triangle-exclamation"></i> ', success: '<i class="fa-solid fa-check"></i> ' }; con.innerHTML += `<span style="color:${c[t] || 'var(--tx)'}">${ic[t] || ''}${m}</span><br>`; con.scrollTop = con.scrollHeight }
 
-            consoleOut.innerHTML += `<span style="color:${color};">${icon}${msg}</span><br>`;
-            consoleOut.scrollTop = consoleOut.scrollHeight;
+    // ── Sidebar ──
+    function addSB(fn) { const fl = Q('flist'); if (Q('f-' + CSS.escape(fn))) return; const li = document.createElement('li'); li.className = 'fi'; li.id = 'f-' + fn; li.innerHTML = `<i class="fa-solid fa-file-code"></i>${fn}`; li.onclick = () => openTab(fn); li.oncontextmenu = e => { e.preventDefault(); ctx(e.clientX, e.clientY, [{ l: 'Open', a: () => openTab(fn) }, { l: 'Remove', a: () => { delete files[fn]; li.remove(); closeTab(fn) } }]) }; fl.appendChild(li) }
+    function hlSB(fn) { document.querySelectorAll('.fi').forEach(e => e.classList.remove('active')); const e = Q('f-' + fn); if (e) e.classList.add('active') }
+    const sb = Q('sb'); sb.ondragover = e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); sb.classList.add('drag-over') } }; sb.ondragleave = e => { if (!sb.contains(e.relatedTarget)) sb.classList.remove('drag-over') };
+    sb.ondrop = e => { e.preventDefault(); sb.classList.remove('drag-over'); let f1 = null; Array.from(e.dataTransfer.files).filter(f => /\.(cir|sp|txt|spice|net|json)$/i.test(f.name)).forEach(f => { if (!f1) f1 = f.name; const r = new FileReader(); r.onload = x => { files[f.name] = x.target.result; addSB(f.name); if (f.name === f1) openTab(f.name) }; r.readAsText(f) }); toast('<i class="fa-solid fa-file-import"></i> Files dropped', 'info') };
+    Q('fi2').onchange = e => { const a = Array.from(e.target.files).filter(f => /\.(cir|sp|txt|spice|net|json)$/i.test(f.name)); if (!a.length) return; files = {}; tabs = []; active = null; Q('flist').innerHTML = ''; Q('tbar').innerHTML = ''; let f1 = null; a.forEach(f => { if (!f1) f1 = f.name; const r = new FileReader(); r.onload = x => { files[f.name] = x.target.result; addSB(f.name); if (f.name === f1) openTab(f.name) }; r.readAsText(f) }); toast(`<i class="fa-solid fa-folder-open"></i> ${a.length} files`, 'success') };
+
+    // ── Tabs ──
+    function openTab(fn) { if (!tabs.find(t => t.f === fn)) tabs.push({ f: fn, mod: false }); active = fn; render(); hlSB(fn); sync(); Q('wel').style.display = 'none' }
+    function closeTab(fn) { const i = tabs.findIndex(t => t.f === fn); if (i < 0) return; tabs.splice(i, 1); if (active === fn) active = tabs.length ? tabs[Math.min(i, tabs.length - 1)].f : null; render(); sync(); Q('wel').style.display = active ? 'none' : 'flex'; if (active) hlSB(active) }
+    function render() {
+      const b = Q('tbar'); b.innerHTML = ''; tabs.forEach((t, i) => {
+        const d = document.createElement('div'); d.className = 'tab' + (t.f === active ? ' active' : ''); d.draggable = true; d.innerHTML = `<i class="fa-solid fa-file-code" style="color:var(--ci);font-size:12px"></i>${t.f}${t.mod ? '<span class="dot">•</span>' : ''}<span class="tx"><i class="fa-solid fa-xmark"></i></span>`;
+        d.onclick = e => { if (!e.target.closest('.tx')) { active = t.f; render(); hlSB(t.f); sync() } }; d.querySelector('.tx').onclick = e => { e.stopPropagation(); closeTab(t.f) }; d.onauxclick = e => { if (e.button === 1) { e.preventDefault(); closeTab(t.f) } };
+        d.ondragstart = e => { e.dataTransfer.setData('ti', i); d.style.opacity = '.4' }; d.ondragend = () => { d.style.opacity = ''; b.querySelectorAll('.tab').forEach(x => x.classList.remove('dt')) };
+        d.ondragover = e => { if (e.dataTransfer.types.includes('ti')) { e.preventDefault(); d.classList.add('dt') } }; d.ondragleave = () => d.classList.remove('dt');
+        d.ondrop = e => { e.preventDefault(); d.classList.remove('dt'); const fr = +e.dataTransfer.getData('ti'); if (fr !== i) { const [m] = tabs.splice(fr, 1); tabs.splice(i, 0, m); render() } };
+        d.oncontextmenu = e => { e.preventDefault(); ctx(e.clientX, e.clientY, [{ l: 'Close', s: 'Ctrl+W', a: () => closeTab(t.f) }, { l: 'Close Others', a: () => { tabs = [{ f: t.f, mod: t.mod }]; active = t.f; render(); sync() } }, { l: 'Close All', a: () => { tabs = []; active = null; render(); sync(); Q('wel').style.display = 'flex' } }]) };
+        b.appendChild(d)
+      })
+    }
+    function sync() { if (!E) return; if (active && files[active] !== undefined) { if (E.getValue() !== files[active]) E.setValue(files[active]) } else if (!active) E.setValue('') }
+    function updTag() { if (!E) return; const m = E.getValue().toUpperCase().match(/\.(TRAN|AC|DC|SENS|OP)\b/); Q('atag').textContent = m ? m[0] : '.OP' }
+
+    function newFile() { tabN++; const fn = 'untitled-' + tabN + '.cir'; files[fn] = '* New SPICE file\n\n.OP\n.END\n'; addSB(fn); openTab(fn); toast('<i class="fa-solid fa-file-circle-plus"></i> ' + fn, 'info') }
+    function saveFile() { if (!active || !E) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([E.getValue()], { type: 'text/plain' })); a.download = active; a.click(); const t = tabs.find(t => t.f === active); if (t) { t.mod = false; render() } toast('<i class="fa-solid fa-floppy-disk"></i> Saved', 'success') }
+
+    // ── Gutters ──
+    function initG(gid, bid, aid, hz) {
+      const g = Q(gid), b = Q(bid), a = Q(aid); if (!g || !b) return; g.onmousedown = e => {
+        e.preventDefault(); const s0 = hz ? e.clientX : e.clientY, sb = hz ? b.getBoundingClientRect().width : b.getBoundingClientRect().height, sa = a ? (hz ? a.getBoundingClientRect().width : a.getBoundingClientRect().height) : 0; document.body.classList.add('no-select', hz ? 'col-resize' : 'row-resize'); g.classList.add('on'); let raf = 0;
+        const mv = ev => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const d = (hz ? ev.clientX : ev.clientY) - s0; b.style.flex = '0 0 ' + Math.max(hz ? 80 : 40, sb + d) + 'px'; if (a && a.id !== 'right') a.style.flex = '0 0 ' + Math.max(hz ? 80 : 40, sa - d) + 'px'; if (E) E.layout(); try { Plotly.Plots.resize(Q('pa')) } catch (_) { } }) };
+        const up = () => { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.classList.remove('no-select', 'col-resize', 'row-resize'); g.classList.remove('on') };
+        document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up)
+      }
+    }
+    initG('gsb', 'sb', 'center', true); initG('grt', 'center', 'right', true); initG('gt', 'ew', 'term', false);
+
+    function toggleSB() { const s = Q('sb'), g = Q('gsb'), h = s.classList.toggle('hidden'); g.style.display = h ? 'none' : ''; document.querySelectorAll('.nav-btn')[0].classList.toggle('active', !h); setTimeout(() => { if (E) E.layout() }, 30) }
+    function toggleTerm() { const t = Q('term'), g = Q('gt'), h = t.classList.toggle('hidden'); g.style.display = h ? 'none' : ''; setTimeout(() => { if (E) E.layout() }, 30) }
+
+    // ── Context menu ──
+    function ctx(x, y, items) { ctxC(); const m = document.createElement('div'); m.className = 'ctx'; m.id = 'ctx'; items.forEach(it => { if (it === '---') { m.innerHTML += '<div class="cs2"></div>'; return } const d = document.createElement('div'); d.className = 'ci'; d.innerHTML = it.l + (it.s ? '<span class="shortcut">' + it.s + '</span>' : ''); d.onclick = () => { ctxC(); it.a() }; m.appendChild(d) }); m.style.left = Math.min(x, innerWidth - 210) + 'px'; m.style.top = Math.min(y, innerHeight - items.length * 30 - 20) + 'px'; document.body.appendChild(m); requestAnimationFrame(() => document.addEventListener('click', ctxC, { once: true })) }
+    function ctxC() { const m = Q('ctx'); if (m) m.remove() }
+
+    // ── Command palette ──
+    const CMDS = [{ l: 'Simulate', i: 'fa-solid fa-play', k: 'F5', a: runSim }, { l: 'New File', i: 'fa-solid fa-file-circle-plus', k: 'Ctrl+N', a: newFile }, { l: 'Save', i: 'fa-solid fa-floppy-disk', k: 'Ctrl+S', a: saveFile }, { l: 'Format Code', i: 'fa-solid fa-wand-magic-sparkles', k: 'Alt+Shift+F', a: fmtCode }, { l: 'Export CSV', i: 'fa-solid fa-download', k: '', a: exportCSV }, { l: 'Open Workspace', i: 'fa-solid fa-folder-open', k: 'Ctrl+O', a: () => Q('fi2').click() }, { l: 'Toggle Sidebar', i: 'fa-solid fa-columns', k: 'Ctrl+B', a: toggleSB }, { l: 'Toggle Terminal', i: 'fa-solid fa-terminal', k: 'Ctrl+`', a: toggleTerm }, { l: 'Clear Console', i: 'fa-solid fa-broom', k: '', a: () => con.innerHTML = '' }, { l: 'Zoom In', i: 'fa-solid fa-plus', k: 'Ctrl+=', a: zoomIn }, { l: 'Zoom Out', i: 'fa-solid fa-minus', k: 'Ctrl+-', a: zoomOut }, { l: 'Reset Zoom', i: 'fa-solid fa-arrows-rotate', k: '', a: zoomReset }, { l: 'Next Theme', i: 'fa-solid fa-palette', k: 'Ctrl+T', a: cycleTheme }, { l: 'Custom Theme Editor', i: 'fa-solid fa-swatchbook', k: '', a: () => openThemeEditor() }, { l: 'Edit Current Theme', i: 'fa-solid fa-pen', k: '', a: () => { if (THEMES[themeIdx]?._custom) openThemeEditor(themeIdx); else { toast('Copy as custom first — use the editor to create', 'info'); openThemeEditor() } } }, { l: 'Netlist Info', i: 'fa-solid fa-circle-info', k: '', a: cmdInfo }, { l: 'List Elements', i: 'fa-solid fa-microchip', k: '', a: cmdElements }, { l: 'Engine Version', i: 'fa-solid fa-code-branch', k: '', a: cmdVersion }];
+    let palO = false, palI = 0;
+    function openPal() { if (palO) return; palO = true; palI = 0; const ov = document.createElement('div'); ov.className = 'pov'; ov.id = 'pov'; ov.innerHTML = '<div class="pal"><input type="text" placeholder="Type a command..." id="pin"><div class="pl" id="pls"></div></div>'; document.body.appendChild(ov); ov.onclick = e => { if (e.target === ov) closePal() }; const inp = Q('pin'); inp.focus(); rPal(''); inp.oninput = () => { palI = 0; rPal(inp.value) }; inp.onkeydown = e => { const its = Q('pls').children; if (e.key === 'Escape') closePal(); else if (e.key === 'ArrowDown') { e.preventDefault(); palI = Math.min(palI + 1, its.length - 1); hPal() } else if (e.key === 'ArrowUp') { e.preventDefault(); palI = Math.max(palI - 1, 0); hPal() } else if (e.key === 'Enter') { e.preventDefault(); if (its[palI]) its[palI].click() } } }
+    function closePal() { const o = Q('pov'); if (o) o.remove(); palO = false }
+    function rPal(q) { const ls = Q('pls'); if (!ls) return; const ql = q.toLowerCase(); const f = CMDS.filter(c => c.l.toLowerCase().includes(ql)); ls.innerHTML = ''; f.forEach((c, i) => { const d = document.createElement('div'); d.className = 'pi' + (i === palI ? ' s' : ''); d.innerHTML = `<i class="${c.i}"></i>${c.l}<span class="pk">${c.k}</span>`; d.onclick = () => { closePal(); c.a() }; ls.appendChild(d) }) }
+    function hPal() { const its = Q('pls').children; Array.from(its).forEach((e, i) => e.classList.toggle('s', i === palI)); if (its[palI]) its[palI].scrollIntoView({ block: 'nearest' }) }
+
+    // ── Terminal commands ──
+    async function cmdInfo() {
+      if (!E) { log('No editor content', 'warn'); return }
+      try {
+        const r = await (await fetch('/api/netlist-info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ netlist: E.getValue() }) })).json();
+        if (r.status === 'ok') {
+          log('── Netlist Info ──', 'system'); log(`Nodes: ${r.nodes} | Elements: ${r.elements} | Subcircuits: ${r.subcircuits}`); log(`Analyses: ${r.analyses.join(', ') || 'none'}`);
+          if (r.element_summary) { const s = Object.entries(r.element_summary).map(([k, v]) => `${k}:${v}`).join(' '); log(`Breakdown: ${s}`) }
+          if (r.diagnostics > 0) log(`Diagnostics: ${r.diagnostics} warnings/errors`, 'warn')
         }
+        else log('Parse error: ' + (r.message || 'unknown'), 'error')
+      } catch (e) { log('Failed: ' + e.message, 'error') }
+    }
 
-        function handleTerminal(e) {
-            if (e.key === 'Enter') {
-                const cmd = e.target.value.trim();
-                e.target.value = '';
-                if (!cmd) return;
-                appendLog(`PS C:\\NextSPICE> ${cmd}`, "system");
-                const args = cmd.split(" ");
-                switch (args[0].toLowerCase()) {
-                    case 'clear': case 'cls': consoleOut.innerHTML = ''; break;
-                    case 'run': runSimulation(); break;
-                    default: appendLog(`Term: '${args[0]}' not recognized.`, "error");
-                }
-            }
+    async function cmdElements() {
+      try {
+        const r = await (await fetch('/api/elements')).json(); log('── Supported Elements ──', 'system');
+        r.elements.forEach(e => log(`  <b>${e.prefix}</b> — ${e.name}`)); log(`Waveforms: ${r.waveforms.join(', ')}`, 'system')
+      } catch (e) { log('Failed: ' + e.message, 'error') }
+    }
+
+    async function cmdVersion() {
+      try { const r = await (await fetch('/api/version')).json(); log(`── ${r.engine} v${r.version} ──`, 'system'); log(`${r.elements} element types | Analyses: ${r.analyses.join(', ')}`) } catch (e) { log('Failed: ' + e.message, 'error') }
+    }
+
+    async function cmdNodes() {
+      if (!E) { log('No editor content', 'warn'); return }
+      try {
+        const r = await (await fetch('/api/netlist-info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ netlist: E.getValue() }) })).json();
+        if (r.status === 'ok') {
+          log('── Node Map ──', 'system'); log(`${r.nodes} unique nodes, ${r.elements} elements`);
+          const s = Object.entries(r.element_summary || {}).map(([k, v]) => `${v}x ${k}`).join(', '); if (s) log(`Components: ${s}`)
         }
+        else log('Parse error: ' + (r.message || 'unknown'), 'error')
+      } catch (e) { log('Failed: ' + e.message, 'error') }
+    }
 
-        // --- 📂 檔案與頁籤系統 ---
-        function loadWorkspace(event) {
-            const files = event.target.files;
-            if (files.length === 0) return;
-            const fileListUI = document.getElementById('file-list');
-            fileListUI.innerHTML = '';
-            workspaceFiles = {}; openTabs = []; document.getElementById('tabs-bar').innerHTML = '';
-
-            appendLog(`[SYS] Loaded workspace: ${files.length} files.`, "system");
-
-            let firstFile = null;
-            Array.from(files).forEach((file) => {
-                if (file.name.endsWith('.cir') || file.name.endsWith('.sp') || file.name.endsWith('.txt')) {
-                    if (!firstFile) firstFile = file.name;
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        workspaceFiles[file.name] = e.target.result;
-                        const li = document.createElement('li');
-                        li.className = 'file-item';
-                        li.id = `sidebar-item-${file.name}`;
-                        li.innerHTML = `<i class="fa-solid fa-file-code file-icon"></i> ${file.name}`;
-                        li.onclick = () => openFile(file.name);
-                        fileListUI.appendChild(li);
-
-                        if (file.name === firstFile) openFile(file.name);
-                    };
-                    reader.readAsText(file);
-                }
-            });
-        }
-
-        function openFile(filename) {
-            // 更新 Sidebar 樣式
-            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
-            const sidebarItem = document.getElementById(`sidebar-item-${filename}`);
-            if (sidebarItem) sidebarItem.classList.add('active');
-
-            // 處理 Tab
-            if (!openTabs.includes(filename)) {
-                openTabs.push(filename);
-                renderTabs();
-            }
-            activeFile = filename;
-            renderTabs();
-
-            // 更新 Editor
-            if (window.editor && workspaceFiles[filename] !== undefined) {
-                window.editor.setValue(workspaceFiles[filename]);
-            }
-        }
-
-        function renderTabs() {
-            const tabsBar = document.getElementById('tabs-bar');
-            tabsBar.innerHTML = '';
-            openTabs.forEach(file => {
-                const tab = document.createElement('div');
-                tab.className = `tab ${file === activeFile ? 'active' : ''}`;
-                tab.innerHTML = `<i class="fa-solid fa-file-code" style="color:#519aba"></i> ${file} 
-                                 <span class="tab-close" onclick="closeTab(event, '${file}')"><i class="fa-solid fa-xmark"></i></span>`;
-                tab.onclick = () => openFile(file);
-                tabsBar.appendChild(tab);
-            });
-        }
-
-        function closeTab(event, filename) {
-            event.stopPropagation(); // 防止觸發 openFile
-            openTabs = openTabs.filter(f => f !== filename);
-            if (openTabs.length === 0) {
-                window.editor.setValue("");
-                activeFile = null;
-                renderTabs();
-                return;
-            }
-            if (activeFile === filename) openFile(openTabs[0]); // 切換到第一個
-            else renderTabs();
-        }
-
-        // --- 🚀 核心模擬引擎呼叫 ---
-        async function runSimulation() {
-            if (!window.editor) return;
-            const netlist = window.editor.getValue();
-
-            // UI 更新：載入中狀態
-            statusText.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Simulating...`;
-            document.getElementById('status-text').parentElement.parentElement.style.backgroundColor = "#d7ba7d"; // 變黃色
-            appendLog("Executing simulation...", "system");
-
+    Q('cmd').onkeydown = e => {
+      if (e.key !== 'Enter') return; const c = e.target.value.trim(); e.target.value = ''; if (!c) return; log('▶ ' + c, 'system'); const parts = c.split(/\s+/), w = parts[0].toLowerCase();
+      if (w === 'clear' || w === 'cls') con.innerHTML = '';
+      else if (w === 'run') runSim();
+      else if (w === 'info') cmdInfo();
+      else if (w === 'elements' || w === 'el') cmdElements();
+      else if (w === 'version' || w === 'ver') cmdVersion();
+      else if (w === 'nodes') cmdNodes();
+      else if (w === 'theme') { const sub = parts[1]?.toLowerCase(); if (sub === 'new' || sub === 'create') openThemeEditor(); else if (sub === 'edit') { if (THEMES[themeIdx]?._custom) openThemeEditor(themeIdx); else { log('Current theme is built-in. Use <b>theme new</b> to create custom.', 'warn') } } else if (sub === 'list') log('Themes: ' + THEMES.map((t, i) => `${i}=${t.name}${t._custom ? ' (custom)' : ''}`).join(', '), 'system'); else { const idx = parseInt(sub); if (!isNaN(idx) && idx >= 0 && idx < THEMES.length) { applyTheme(idx); log('Theme: ' + THEMES[idx].name, 'success') } else { log('Usage: <b>theme</b> [0-N] | <b>theme new</b> | <b>theme edit</b> | <b>theme list</b>', 'system'); log('Themes: ' + THEMES.map((t, i) => `${i}=${t.name}${t._custom ? ' *' : ''}`).join(', '), 'system') } } }
+      else if (w === 'font' || w === 'fontsize') { const sz = parseInt(parts[1]); if (!isNaN(sz) && sz >= 10 && sz <= 24) { fontSize = sz; applyFontSize(); log('Font size: ' + sz + 'px', 'success') } else log('Usage: font <10-24>. Current: ' + fontSize + 'px', 'system') }
+      else if (w === 'format' || w === 'fmt') fmtCode();
+      else if (w === 'export') exportCSV();
+      else if (w === 'help') log('Commands: <b>run</b> <b>info</b> <b>elements</b> <b>nodes</b> <b>version</b> <b>theme</b> [N|new|edit|list] <b>font</b> [10-24] <b>format</b> <b>export</b> <b>clear</b>', 'system');
+      else if (w === 'redraw' || w === 'load') {
+        const fn = parts[1]; // 抓取檔名，例如 redraw my_res.json
+        if (fn) {
+          if (files[fn]) {
             try {
-                const response = await fetch('/api/simulate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ netlist: netlist })
-                });
-
-                const result = await response.json();
-
-                // 恢復綠色 Ready 狀態
-                document.getElementById('status-text').parentElement.parentElement.style.backgroundColor = "var(--accent)";
-
-                if (result.logs) {
-                    result.logs.forEach(log => {
-                        let cleanLog = log.replace(/[❌⚠️✓🚀]/g, '').trim();
-                        if (cleanLog.includes("ERROR") || cleanLog.includes("失敗")) appendLog(cleanLog, "error");
-                        else if (cleanLog.includes("完成") || cleanLog.includes("SUCCESS")) appendLog(cleanLog, "success");
-                        else if (cleanLog.includes("---")) appendLog("\n" + cleanLog, "system");
-                        else appendLog("      " + cleanLog);
-                    });
-                }
-
-                if (result.status === "success" && result.plots && result.plots.length > 0) {
-                    viewerHeader.innerHTML = `<i class="fa-solid fa-chart-line"></i> Waveform Viewer`;
-                    drawPlot(result.plots, result.layout);
-                    statusText.innerHTML = `<i class="fa-solid fa-check"></i> Simulation Complete`;
-                }
-                else if (result.status === "success" && result.op_results && Object.keys(result.op_results).length > 0) {
-                    viewerHeader.innerHTML = `<i class="fa-solid fa-table"></i> Operating Point (DC Analysis)`;
-                    drawDataGrid(result.op_results);
-                    statusText.innerHTML = `<i class="fa-solid fa-check"></i> OP Analysis Complete`;
-                }
-                else {
-                    statusText.innerHTML = `<i class="fa-solid fa-check"></i> Ready`;
-                    const plotArea = document.getElementById('plot-area');
-                    Plotly.purge(plotArea);
-                    plotArea.innerHTML = '<div class="empty-state"><i class="fa-solid fa-ghost"></i> Simulation finished with no graphical or OP data.</div>';
-                    window.lastPlotData = null;
-                }
-
-            } catch (err) {
-                appendLog(`Communication failed.`, "error");
-                statusText.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Error`;
-                document.getElementById('status-text').parentElement.parentElement.style.backgroundColor = "var(--console-err)";
+              // 從虛擬工作區讀取文字，並解析成 JSON
+              globalSimResult = JSON.parse(files[fn]);
+              log(`Loaded result from <b>${fn}</b>`, 'success');
+              renderFrontend(globalSimResult);
+            } catch (e) {
+              log(`Failed to parse ${fn}. Is it a valid JSON result?`, 'error');
             }
+          } else {
+            log(`File <b>${fn}</b> not found in workspace. Drop it into the sidebar first!`, 'error');
+          }
+        } else {
+          // 如果沒給檔名，就畫記憶體裡現有的
+          if (!globalSimResult) log('No data in memory cache.', 'warn');
+          else { log('Redrawing from memory cache...', 'system'); renderFrontend(globalSimResult); }
         }
+      }
+      else if (w === 'exportjson') exportJSON();
+      else log("Unknown: '" + w + "'. Type <b>help</b> for commands.", 'error')
+    };
 
-        // --- 📊 表格與圖表渲染 ---
-        function drawDataGrid(opData) {
-            const plotArea = document.getElementById('plot-area');
-            Plotly.purge(plotArea);
-            window.lastPlotData = null;
+    document.onkeydown = e => { const ct = e.ctrlKey || e.metaKey; if (ct && e.shiftKey && e.key === 'P') { e.preventDefault(); openPal() } else if (ct && e.key === 'n') { e.preventDefault(); newFile() } else if (ct && e.key === 's') { e.preventDefault(); saveFile() } else if (ct && e.key === 'b') { e.preventDefault(); toggleSB() } else if (ct && e.key === '`') { e.preventDefault(); toggleTerm() } else if (ct && e.key === 'w') { e.preventDefault(); if (active) closeTab(active) } else if (ct && e.key === 'o') { e.preventDefault(); Q('fi2').click() } else if (ct && e.key === 't') { e.preventDefault(); cycleTheme() } else if (ct && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomIn() } else if (ct && e.key === '-') { e.preventDefault(); zoomOut() } else if (e.key === 'Escape') { closePal(); ctxC() } };
 
-            let html = `<div class="table-container"><table class="op-table">
-                <thead><tr>
-                    <th><i class="fa-solid fa-code-branch"></i> Node / Branch</th>
-                    <th><i class="fa-solid fa-bolt"></i> Value</th>
-                </tr></thead><tbody>`;
-
-            const entries = Object.entries(opData).sort((a, b) => a[0].localeCompare(b[0]));
-            entries.forEach(([key, val]) => {
-                let unit = key.startsWith('I(') ? 'A' : (key.startsWith('P(') ? 'W' : 'V');
-                let valClass = 'val-zero';
-                if (val > 1e-12) valClass = 'val-positive';
-                else if (val < -1e-12) valClass = 'val-negative';
-
-                html += `<tr>
-                    <td style="font-weight:bold; color:#dcdcaa;">${key}</td>
-                    <td class="${valClass}">${val.toExponential(5)} <span style="color:#666; font-size:11px;">${unit}</span></td>
-                </tr>`;
-            });
-
-            html += `</tbody></table></div>`;
-            plotArea.innerHTML = html;
+    // ── Monaco + SPICE language ──
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      // Register SPICE language
+      monaco.languages.register({ id: 'spice' });
+      monaco.languages.setMonarchTokensProvider('spice', {
+        ignoreCase: true,
+        tokenizer: {
+          root: [
+            [/^\*.*$/, 'comment'],
+            [/;.*$/, 'comment'],
+            [/\.(tran|ac|dc|op|sens|step|meas|measure|print|probe)\b/, 'keyword.analysis'],
+            [/\.(subckt|ends|end|model|options|param)\b/, 'keyword.directive'],
+            [/\b(sin|pulse|pwl|dc|ac)\b/, 'keyword.waveform'],
+            [/^[RCLVIDEGFHKXMQJ]\w*/, 'type.element'],
+            [/[+-]?\d+\.?\d*[eE][+-]?\d+/, 'number.float'],
+            [/[+-]?\d+\.?\d*/, 'number'],
+            [/\b\d+(\.\d+)?\s*(meg|mil|[tgmkunpfa])\b/, 'number.unit'],
+            [/\b(meg|mil|[tgmkunpfa])\b(?=[\s\),]|$)/, 'number.unit'],
+            [/[{}()\[\]]/, 'delimiter.bracket'],
+            [/[=]/, 'operator'],
+          ]
         }
+      });
 
-        function drawPlot(plotData, layoutConfig) {
-            const plotArea = document.getElementById('plot-area');
-            Plotly.purge(plotArea);
-            plotArea.innerHTML = "";
-            plotArea.style.display = 'block';
+      // Define color themes for each palette
+      defTheme = function (id, t) {
+        monaco.editor.defineTheme(id, {
+          base: 'vs-dark', inherit: true, rules: [
+            { token: 'comment', foreground: t.txm.replace('#', ''), fontStyle: 'italic' },
+            { token: 'keyword.analysis', foreground: t.acc.replace('#', ''), fontStyle: 'bold' },
+            { token: 'keyword.directive', foreground: t.ci.replace('#', ''), fontStyle: 'bold' },
+            { token: 'keyword.waveform', foreground: t.cw.replace('#', '') },
+            { token: 'type.element', foreground: t.cs.replace('#', '') },
+            { token: 'number', foreground: t.ce.replace('#', '') },
+            { token: 'number.float', foreground: t.ce.replace('#', '') },
+            { token: 'number.unit', foreground: t.cw.replace('#', '') },
+            { token: 'delimiter.bracket', foreground: t.txm.replace('#', '') },
+            { token: 'operator', foreground: t.tx.replace('#', '') },
+          ], colors: {
+            'editor.background': t.bg,
+            'editor.foreground': t.tx,
+            'editor.lineHighlightBackground': t.bg2,
+            'editorCursor.foreground': t.acc,
+            'editor.selectionBackground': t.acc + '33',
+            'editorLineNumber.foreground': t.txm,
+            'editorLineNumber.activeForeground': t.acc,
+          }
+        })
+      };
+      THEMES.forEach(t => defTheme(t.monaco, t));
 
-            // 霓虹科技感配色
-            const colors = ['#00FFCC', '#FF3366', '#FFCC00', '#CC66FF', '#3399FF'];
-
-            const traces = plotData.map((p, i) => ({
-                x: p.x, y: p.y, name: p.name, mode: 'lines',
-                line: {
-                    color: colors[i % colors.length],
-                    dash: p.type === 'dash' ? 'dash' : 'solid',
-                    width: 2,
-                    shape: 'spline', smoothing: 0.3
-                }
-            }));
-
-            const layout = {
-                title: { text: layoutConfig.title || 'Waveform', font: { size: 14, color: '#e0e0e0', family: 'Segoe UI' }, x: 0.02, y: 0.95 },
-                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-                font: { color: '#aaaaaa', family: 'Consolas, monospace', size: 11 },
-                xaxis: { title: { text: layoutConfig.xaxis || 'Time (s)', font: { size: 12 } }, gridcolor: '#333333', zerolinecolor: '#666666', type: layoutConfig.is_ac ? 'log' : 'linear', showline: true, linecolor: '#666666', mirror: true },
-                yaxis: { title: { text: layoutConfig.yaxis || 'Voltage (V)', font: { size: 12 } }, gridcolor: '#333333', zerolinecolor: '#666666', showline: true, linecolor: '#666666', mirror: true },
-                hovermode: 'x unified', hoverlabel: { bgcolor: '#1e1e1e', bordercolor: '#333', font: { family: 'Consolas' } },
-                margin: { t: 50, l: 60, r: 30, b: 50 },
-                legend: { font: { size: 12, color: '#e0e0e0' }, orientation: 'h', y: -0.18, x: 0, bgcolor: 'rgba(0,0,0,0)' },
-                autosize: true
-            };
-
-            Plotly.newPlot(plotArea, traces, layout, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d'] });
-            window.lastPlotData = plotData;
-            window.lastXLabel = layoutConfig.xaxis;
+      // SPICE auto-completion
+      monaco.languages.registerCompletionItemProvider('spice', {
+        provideCompletionItems: (model, pos) => {
+          const word = model.getWordUntilPosition(pos);
+          const range = { startLineNumber: pos.lineNumber, endLineNumber: pos.lineNumber, startColumn: word.startColumn, endColumn: word.endColumn };
+          const kw = ['.OP', '.TRAN', '.AC', '.DC', '.SENS', '.STEP', '.MODEL', '.SUBCKT', '.ENDS', '.END', '.PARAM', '.OPTIONS', '.MEAS', '.PRINT', 'SIN(', 'PULSE(', 'PWL(', 'DC ', 'AC '];
+          return { suggestions: kw.map(k => ({ label: k, kind: monaco.languages.CompletionItemKind.Keyword, insertText: k, range })) }
         }
+      });
 
-        function exportCSV() {
-            if (!window.lastPlotData) { appendLog("No plot data to export.", "error"); return; }
-            appendLog("Generating CSV...", "system");
-            try {
-                let csv = (window.lastXLabel || "X_Axis") + "," + window.lastPlotData.map(t => t.name).join(",") + "\n";
-                let len = window.lastPlotData[0].x.length;
-                for (let i = 0; i < len; i++) {
-                    csv += window.lastPlotData[0].x[i] + "," + window.lastPlotData.map(t => t.y[i] !== undefined ? t.y[i] : "").join(",") + "\n";
-                }
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-                a.download = "NextSPICE_Export.csv";
-                a.click();
-                appendLog("CSV Downloaded.", "success");
-            } catch (err) {
-                appendLog(`Export Failed: ${err.message}`, "error");
-            }
-        }
+      E = monaco.editor.create(Q('editor'), { value: '', language: 'spice', theme: THEMES[themeIdx].monaco, automaticLayout: true, fontSize, fontFamily: "'Consolas','Courier New',monospace", minimap: { enabled: false }, scrollBeyondLastLine: false, padding: { top: 12, bottom: 12 }, renderLineHighlight: 'all' });
+      if (active) sync();
+      E.addCommand(monaco.KeyCode.F5, runSim);
+      E.addCommand(monaco.KeyMod.Alt | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, fmtCode);
+      E.onDidChangeCursorPosition(e => { Q('cpos').innerText = 'Ln ' + e.position.lineNumber + ', Col ' + e.position.column });
+      E.onDidChangeModelContent(() => { if (!active) return; files[active] = E.getValue(); const t = tabs.find(t => t.f === active); if (t && !t.mod) { t.mod = true; render() } updTag() });
 
-        async function formatCode() {
-            if (!window.editor) return;
-            try {
-                const code = window.editor.getValue();
-                const response = await fetch('/api/format', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code: code })
-                });
-                if (!response.ok) throw new Error("Server Error");
-                const result = await response.json();
-                if (result.code) {
-                    window.editor.setValue(result.code);
-                    appendLog("Code Formatted.", "success");
-                }
-            } catch (err) {
-                appendLog(`Format failed: ${err.message}`, "error");
-            }
+      // Restore saved preferences
+      try {
+        const st = localStorage.getItem('nxs-theme'); if (st !== null) applyTheme(parseInt(st));
+        const sf = localStorage.getItem('nxs-font'); if (sf !== null) { fontSize = parseInt(sf); applyFontSize() }
+      } catch (_) { }
+    });
+    /*
+        async function runSim() {
+          if (!E) return; Q('stxt').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Simulating...'; Q('sbar').style.borderTopColor = 'var(--cw)'; log('Simulating...', 'system');
+          try {
+            const res = await (await fetch('/api/simulate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ netlist: E.getValue() }) })).json(); Q('sbar').style.borderTopColor = 'var(--bdr)';
+            if (res.logs) res.logs.forEach(l => { let c = l.replace(/[❌⚠️✓🚀]/g, '').trim(); if (c.includes('ERROR') || c.includes('失敗')) log(c, 'error'); else if (c.includes('完成') || c.includes('SUCCESS')) log(c, 'success'); else if (c.includes('---')) log('\n' + c, 'system'); else log('  ' + c) });
+            const pa = Q('pa');
+            if (res.status === 'success' && res.plots?.length) { Q('vhdr').innerHTML = '<i class="fa-solid fa-wave-square"></i> Waveform Viewer'; drawPlot(res.plots, res.layout); Q('stxt').innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px"></i> Done'; Q('stxt').style.color = 'var(--acc)'; toast('<i class="fa-solid fa-check"></i> Simulation complete', 'success') }
+            else if (res.status === 'success' && res.op_results && Object.keys(res.op_results).length) { Q('vhdr').innerHTML = '<i class="fa-solid fa-table-cells"></i> DC Operating Point'; drawGrid(res.op_results); Q('stxt').innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px"></i> OP Done'; Q('stxt').style.color = 'var(--acc)'; toast('<i class="fa-solid fa-check"></i> OP complete', 'success'); const v = Object.keys(res.op_results).filter(k => k.startsWith('V(')).length; const i = Object.keys(res.op_results).filter(k => k.startsWith('I(')).length; Q('sinfo').innerHTML = `<span style="color:var(--ci)">${v} nodes</span> · <span style="color:var(--cw)">${i} branches</span>` }
+            else { Q('stxt').innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px"></i> Done'; Plotly.purge(pa); pa.innerHTML = '<div class="es"><i class="fa-solid fa-ghost"></i>No output data.</div>'; lastP = null }
+          } catch (err) { log('Failed: ' + err.message, 'error'); Q('stxt').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Error'; Q('stxt').style.color = 'var(--ce)'; Q('sbar').style.borderTopColor = 'var(--ce)'; toast('<i class="fa-solid fa-xmark"></i> Failed', 'error') }
         }
-    </script>
+    */
+
+
+    // 🧠 階段 1：純粹負責呼叫 API 並將結果存入快取
+    async function runSim() {
+      if (!E) return;
+      Q('stxt').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Simulating...';
+      Q('sbar').style.borderTopColor = 'var(--cw)';
+      log('Simulating...', 'system');
+
+      try {
+        const res = await (await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ netlist: E.getValue() })
+        })).json();
+
+        // 🚀 核心解耦：存入資料湖
+        globalSimResult = res;
+
+        // 🎨 階段 2：呼叫獨立的渲染引擎
+        renderFrontend(globalSimResult);
+      } catch (err) {
+        log('Failed: ' + err.message, 'error');
+        Q('stxt').innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Error';
+        Q('stxt').style.color = 'var(--ce)';
+        Q('sbar').style.borderTopColor = 'var(--ce)';
+        toast('<i class="fa-solid fa-xmark"></i> Failed', 'error')
+      }
+    }
+
+    // 🎨 階段 2：專門吃 JSON 並更新 UI 的渲染引擎
+    function renderFrontend(res) {
+      if (!res) { toast('No cached data to render', 'warn'); return; }
+      Q('sbar').style.borderTopColor = 'var(--bdr)';
+
+      if (res.logs) res.logs.forEach(l => {
+        let c = l.replace(/[❌⚠️✓🚀]/g, '').trim();
+        if (c.includes('ERROR') || c.includes('失敗')) log(c, 'error');
+        else if (c.includes('完成') || c.includes('SUCCESS') || c.includes('Done')) log(c, 'success');
+        else if (c.includes('---')) log('\n' + c, 'system');
+        else log('  ' + c);
+      });
+
+      const pa = Q('pa');
+      if (res.status === 'success' && res.plots?.length) {
+        Q('vhdr').innerHTML = '<i class="fa-solid fa-wave-square"></i> Waveform Viewer';
+        drawPlot(res.plots, res.layout);
+        Q('stxt').innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px"></i> Done';
+        Q('stxt').style.color = 'var(--acc)';
+        toast('<i class="fa-solid fa-check"></i> Simulation complete', 'success');
+      }
+      else if (res.status === 'success' && res.op_results && Object.keys(res.op_results).length) {
+        Q('vhdr').innerHTML = '<i class="fa-solid fa-table-cells"></i> Data & Measurements';
+        drawGrid(res.op_results);
+        Q('stxt').innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px"></i> OP Done';
+        Q('stxt').style.color = 'var(--acc)';
+        toast('<i class="fa-solid fa-check"></i> Analysis complete', 'success');
+        const v = Object.keys(res.op_results).filter(k => k.startsWith('V(')).length;
+        const i = Object.keys(res.op_results).filter(k => k.startsWith('I(')).length;
+        Q('sinfo').innerHTML = `<span style="color:var(--ci)">${v} nodes</span> · <span style="color:var(--cw)">${i} branches</span>`;
+      }
+      else {
+        Q('stxt').innerHTML = '<i class="fa-solid fa-circle" style="font-size:8px"></i> Done';
+        Plotly.purge(pa);
+        pa.innerHTML = '<div class="es"><i class="fa-solid fa-ghost"></i>No output data.</div>';
+        lastP = null;
+      }
+    }
+
+
+
+
+
+    function drawGrid(op) {
+      const pa = Q('pa'); Plotly.purge(pa); lastP = null; const rows = Object.entries(op).sort((a, b) => a[0].localeCompare(b[0])).map(([k, v]) => { const u = k[0] === 'I' ? 'A' : k[0] === 'P' ? 'W' : 'V'; const c = v > 1e-12 ? 'vp' : v < -1e-12 ? 'vn' : 'vz'; return `<tr><td style="font-weight:600;color:var(--cw)">${k}</td><td class="${c}">${v.toExponential(5)} <span style="color:var(--txm);font-size:10px">${u}</span></td></tr>` }).join('');
+      pa.innerHTML = `<div class="tw"><table class="ot"><thead><tr><th><i class="fa-solid fa-code-branch"></i> Node / Branch</th><th><i class="fa-solid fa-bolt"></i> Value</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    }
+
+    function drawPlot(data, lc) {
+      const pa = Q('pa'); Plotly.purge(pa); pa.innerHTML = ''; pa.style.display = 'block'; const clr = THEMES[themeIdx].plotClr;
+      const traces = data.map((p, i) => ({ x: p.x, y: p.y, name: p.name, mode: 'lines', line: { color: clr[i % clr.length], dash: p.type === 'dash' ? 'dash' : 'solid', width: 2, shape: 'spline', smoothing: .3 } }));
+      const t = THEMES[themeIdx];
+      const ax = (tt, ac) => ({ title: { text: tt, font: { size: 11 } }, gridcolor: t.grid, zerolinecolor: t.bdr, showline: true, linecolor: t.bdr, mirror: true, ...(ac ? { type: 'log' } : {}) });
+      Plotly.newPlot(pa, traces, { title: { text: lc.title || '', font: { size: 13, color: t.txm, family: 'Segoe UI' }, x: .02, y: .95 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)', font: { color: t.txm, family: 'Consolas,monospace', size: 10 }, xaxis: ax(lc.xaxis || 'Time (s)', lc.is_ac), yaxis: ax(lc.yaxis || 'Voltage (V)'), hovermode: 'x unified', hoverlabel: { bgcolor: t.bg2, bordercolor: t.bdr, font: { family: 'Consolas' } }, margin: { t: 40, l: 55, r: 20, b: 45 }, legend: { font: { size: 11, color: t.txm }, orientation: 'h', y: -.2, x: 0, bgcolor: 'rgba(0,0,0,0)' }, autosize: true }, { responsive: true, displaylogo: false, modeBarButtonsToRemove: ['lasso2d', 'select2d'] });
+      lastP = data; lastX = lc.xaxis
+    }
+
+    function exportCSV() { if (!lastP) { toast('No data', 'error'); return } try { const d = lastP, csv = [(lastX || 'X') + ',' + d.map(t => t.name).join(','), ...d[0].x.map((_, i) => d[0].x[i] + ',' + d.map(t => t.y[i] ?? '').join(','))].join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'vSPICE_Export.csv'; a.click(); toast('<i class="fa-solid fa-download"></i> Exported', 'success') } catch (_) { toast('Export failed', 'error') } }
+    function exportJSON() {
+      if (!globalSimResult) { toast('No data to export', 'error'); return; }
+
+      // 自動產生檔名 (例如: mycircuit_res.json)
+      const fn = (active ? active.split('.')[0] : 'sim') + '_res.json';
+
+      // 將 JSON 格式化後，直接存進前端的虛擬檔案系統！
+      files[fn] = JSON.stringify(globalSimResult, null, 2);
+
+      // 在側邊欄新增這個檔案，並直接打開分頁！
+      addSB(fn);
+      openTab(fn);
+
+      log(`JSON exported to workspace as <b>${fn}</b>`, 'success');
+      toast('<i class="fa-solid fa-file-code"></i> JSON Created', 'success');
+    }
+    async function fmtCode() { if (!E) return; try { const r = await (await fetch('/api/format', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: E.getValue() }) })).json(); if (r.code) { E.setValue(r.code); toast('<i class="fa-solid fa-check"></i> Formatted', 'success') } } catch (_) { toast('Format failed', 'error') } }
+
+    files['untitled.cir'] = '* Voltage Divider — Try it!\nV1 IN 0 DC 12\nR1 IN MID 1k\nR2 MID 0 2k\n.OP\n.END';
+    addSB('untitled.cir'); openTab('untitled.cir');
+  </script>
 </body>
 
 </html>

@@ -6,19 +6,19 @@ import traceback
 
 from nextspice.compiler.frontend import SpiceParser
 from nextspice.runtime.circuit import Circuit
-from nextspice.runtime.runner import SimulationRunner
+from nextspice.runtime.runner1 import SimulationRunner
 from nextspice.compiler.formatter import SpiceFormatter
 import json
 app = FastAPI()
 
-VERSION = "1.4.1"
+VERSION = "2.0.0"
 SUPPORTED_ELEMENTS = {
     "R": "Resistor", "C": "Capacitor", "L": "Inductor",
     "V": "Voltage Source", "I": "Current Source", "D": "Diode",
     "E": "VCVS", "G": "VCCS", "H": "CCVS", "F": "CCCS",
     "K": "Mutual Inductance", "X": "Subcircuit Call","Q":"BJT"
 }
-SUPPORTED_ANALYSES = [".OP", ".TRAN", ".AC", ".DC", ".SENS"]
+SUPPORTED_ANALYSES = [".OP", ".TRAN", ".AC"]
 SUPPORTED_DIRECTIVES = [".MODEL", ".OPTIONS", ".PRINT", ".PROBE", ".MEAS", ".MEASURE", ".STEP", ".SUBCKT", ".ENDS", ".PARAM", ".END"]
 SUPPORTED_WAVEFORMS = ["SIN", "PULSE", "PWL"]
 

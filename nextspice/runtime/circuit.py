@@ -1,6 +1,6 @@
 from nextspice.engine.elements import (
     Resistor, Capacitor, Inductor, VoltageSource, CurrentSource,
-    VCVS, VCCS, CCVS, CCCS, MutualInductance,Diode
+    VCVS, VCCS, CCVS, CCCS, MutualInductance,Diode,BJT
 )
 
 class NodeManager:
@@ -98,6 +98,8 @@ class Circuit:
                 elif el_type == "subckt_call":
                     # 經過我們的 Macro Expansion，這裡理論上不該再看到子電路呼叫了
                     errors.append(f"Subcircuit {el_data['name']} was not flattened!")
+                elif el_type == "bjt":
+                    self._build_bjt(el_data, p_node, n_node)
                 else:
                     errors.append(f"Unsupported element type: {el_type}")
                     
@@ -221,6 +223,50 @@ class Circuit:
             n=n_factor
         ))
 
+    def _build_bjt(self, data, p, n):
+        # 1. 準備預設參數
+        is_sat = 1e-14
+        bf = 100.0
+        br = 1.0
+        temp = 300.15
+        bjt_type = 'NPN'
+
+        # 2. 檢查 Model
+        model_name = data.get("model")
+        if model_name:
+            model_data = self.models.get(model_name.upper())
+            if model_data and model_data.get("type", "").upper() == "Q":
+                params = model_data.get("params", model_data)
+                params_upper = {k.upper(): v for k, v in params.items()}
+                
+                if "IS" in params_upper: is_sat = float(params_upper["IS"])
+                if "BF" in params_upper: bf = float(params_upper["BF"])
+                if "BR" in params_upper: br = float(params_upper["BR"])
+                if "TEMP" in params_upper: temp = float(params_upper["TEMP"])
+                
+                # 🚀 判斷 NPN/PNP：看 BF 和 BR 的大小 (你的聰明小 hack)
+                if bf > br:
+                    bjt_type = 'NPN'
+                else:
+                    bjt_type = 'PNP'
+
+        # 3. 建立 BJT 物件
+        # 🚀 致命 BUG 修復：明確讀取 Parser 存下來的 collector, base, emitter！
+        nc_idx = self.node_mgr.mapping.get(data.get("collector"), 0)
+        nb_idx = self.node_mgr.mapping.get(data.get("base"), 0)
+        ne_idx = self.node_mgr.mapping.get(data.get("emitter"), 0)
+
+        self._add_element(BJT(
+            data["name"], 
+            nc=nc_idx, 
+            nb=nb_idx,
+            ne=ne_idx,
+            bjt_type=bjt_type,
+            is_sat=is_sat,
+            bf=bf,
+            br=br,
+            temp=temp
+        ))
     def get_voltage_report(self, x):
         """將 MNA 解向量轉換回人類可讀的節點電壓"""
         report = {}

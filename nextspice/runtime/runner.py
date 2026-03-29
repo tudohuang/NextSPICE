@@ -1,18 +1,23 @@
 import numpy as np
 import traceback
 import math
-from .solver import Simulator
+from .solver import Simulator, SimulatorOptions
 
 class SimulationRunner:
     """
     NextSPICE 分析排程總管 (Dispatcher)
     負責處理 .STEP 掃描、調度各項分析 (.OP, .TRAN, .AC 等)，並將結果打包成統一格式。
-    這包邏輯獨立於 Web API，可供 CLI 或 Desktop App 直接呼叫。
     """
     def __init__(self, circuit, circuit_json):
         self.circuit = circuit
         self.circuit_json = circuit_json
+        
+        # 🚀 完美解耦：
+        # response_data 負責與前端 UI / Plotly 溝通
         self.response_data = {"status": "success", "logs": [], "plots": [], "layout": {}, "op_results": {}}
+        
+        # raw_data 是引擎內部的「純淨資料湖」，供 .MEASURE, .FOURIER 後處理使用
+        self.raw_data = {"op": [], "tran": [], "ac": [], "dc": [], "sens": []} 
 
     def log(self, msg):
         self.response_data["logs"].append(msg)
@@ -52,7 +57,9 @@ class SimulationRunner:
                 else:
                     self.log(f"[ERR] .STEP 找不到元件 {target_name}，退回單次模擬。")
 
-            # 🌟 外層終極大迴圈
+            # ==========================================
+            # 🧠 階段 1：核心計算引擎 (只算數學，不碰畫圖)
+            # ==========================================
             for step_val in step_values:
                 suffix = "" 
                 
@@ -61,11 +68,21 @@ class SimulationRunner:
                     elif hasattr(target_el, 'dc_value'): target_el.dc_value = self.safe_num(step_val)
                     suffix = f" ({target_name}={step_val:.1e})"
                 
-                simulator = Simulator(self.circuit)
+                sim_opts = SimulatorOptions(self.circuit_json.get("options", {}))
+                simulator = Simulator(self.circuit, options=sim_opts)
+
+                # 首次迴圈印出求解器設定
+                if step_val == step_values[0]:
+                    opts_info = []
+                    if sim_opts.solver != 'spsolve': opts_info.append(f"Solver={sim_opts.solver}")
+                    if sim_opts.method != 'TRAP': opts_info.append(f"Method={sim_opts.method}")
+                    if sim_opts.damping != 'AUTO': opts_info.append(f"Damping={sim_opts.damping}")
+                    if opts_info:
+                        self.log(f"[OPTIONS] {', '.join(opts_info)}")
 
                 for analysis in analyses:
                     atype = analysis["type"]
-                    
+
                     if atype == "op":
                         if step_val == step_values[0]: self.log("--- .OP Analysis ---")
                         res = simulator.solve_op()
@@ -80,78 +97,43 @@ class SimulationRunner:
                                     v1 = res.x[n1_idx] if 0 <= n1_idx < len(res.x) else 0.0
                                     v2 = res.x[n2_idx] if 0 <= n2_idx < len(res.x) else 0.0
                                     r_val = getattr(el, 'value', 1.0)
-                                    if r_val != 0:
-                                        report[f"P({el.name})"] = self.safe_num(((v1 - v2) ** 2) / r_val)
+                                    if r_val != 0: report[f"P({el.name})"] = self.safe_num(((v1 - v2) ** 2) / r_val)
                                 elif el.name.upper().startswith('V'):
                                     i_val = report.get(f"I({el.name})", 0.0)
                                     v_val = getattr(el, 'dc_value', getattr(el, 'value', 0.0))
                                     report[f"P({el.name})"] = self.safe_num(v_val * i_val)
 
+                            # 🚀 存入純淨資料湖
+                            self.raw_data["op"].append({"suffix": suffix, "data": report})
+                            
                             if step_val == step_values[0] or target_el is None:
-                                self.response_data["op_results"] = report
                                 for name, val in report.items():
                                     unit = "W" if name.startswith("P(") else ("A" if name.startswith("I(") else "V")
                                     self.log(f"{name:<10} | {val:>12.5e} {unit}")
 
                     elif atype == "tran":
-                        self.log("--- .TRAN Analysis ---")
-                        
+                        if step_val == step_values[0]: self.log("--- .TRAN Analysis ---")
                         tran_results = simulator.solve_tran(analysis["tstep"], analysis["tstop"])
                         
-                        # 🚀 暴力全輸出：不管什麼過濾器了，矩陣算出什麼，我就打包什麼！
                         formatted_tran = []
                         for step in tran_results:
                             if step.get("status") != "SUCCESS": continue
-                            
-                            # 拿到全部節點電壓
-                            full_report = simulator.get_full_report(step["x"])
-                            
-                            # 建立這一個時間點的完整資料包
                             report = {"time": step["time"]}
-                            report.update(full_report)
+                            report.update(simulator.get_full_report(step["x"]))
                             formatted_tran.append(report)
-                            
-                        self.response_data["tran_results"] = formatted_tran
-                        self.log(f"[OK] .TRAN 完成。共 {len(formatted_tran)} 個資料點。")
-
-                        if formatted_tran:
-                            # 🩸 你要看數字？我就印在 Log 裡證明它不是假算！
-                            # 抓出最後一個時間點 (t=50ms) 的所有數值印出來
-                            last_pt = formatted_tran[-1]
-                            debug_str = ", ".join([f"{k}: {v:.4f}" for k, v in last_pt.items()])
-                            self.log(f"[DEBUG] 矩陣最後一刻原始輸出 -> {debug_str}")
-
-                            # 🚀 畫圖數據綁定：保證 plots 陣列絕對塞滿東西
-                            t_vals = [step["time"] for step in formatted_tran]
-                            plot_keys = [k for k in formatted_tran[0].keys() if k != "time"]
-                            
-                            self.response_data["layout"] = {
-                                "title": "Transient Response", 
-                                "xaxis": "Time (s)", 
-                                "yaxis": "Voltage (V) / Current (A)"
-                            }
-                            
-                            for key in plot_keys:
-                                y_vals = [self.safe_num(step.get(key, 0.0)) for step in formatted_tran]
-                                self.response_data["plots"].append({
-                                    "name": f"{key}{suffix}", 
-                                    "x": t_vals, 
-                                    "y": y_vals, 
-                                    "type": "solid"
-                                })
+                        
+                        # 🚀 存入純淨資料湖
+                        self.raw_data["tran"].append({"suffix": suffix, "data": formatted_tran})
+                        self.log(f"[OK] .TRAN 完成。共 {len(formatted_tran)} 個資料點。{suffix}")
 
                     elif atype == "ac":
                         if step_val == step_values[0]: self.log(f"--- .AC Analysis ---")
                         ac_results = simulator.solve_ac(analysis['fstart'], analysis['fstop'], analysis['points'], analysis['sweep'])
-                        freqs = [self.safe_num(r["freq"]) for r in ac_results if r["status"] == "SUCCESS"]
                         
-                        self.response_data["layout"] = {"title": "AC Frequency Response", "xaxis": "Frequency (Hz)", "yaxis": "Magnitude (dB)", "is_ac": True}
-                        for node_name in nodes_to_plot:
-                            if 'IN' in node_name.upper(): continue
-                            idx = self.circuit.node_mgr.mapping[node_name] - 1
-                            v_cplx = [r["x"][idx] for r in ac_results if r["status"] == "SUCCESS"]
-                            mags = [self.safe_num(20 * np.log10(np.abs(v) + 1e-20)) for v in v_cplx]
-                            self.response_data["plots"].append({"name": f"Mag V({node_name}){suffix}", "x": freqs, "y": mags, "type": "solid"})
+                        # 🚀 存入純淨資料湖
+                        self.raw_data["ac"].append({"suffix": suffix, "data": ac_results, "sweep": analysis['sweep']})
+                        succ_pts = len([r for r in ac_results if r["status"] == "SUCCESS"])
+                        self.log(f"[OK] .AC 完成。共 {succ_pts} 個有效點。{suffix}")
 
                     elif atype == "dc":
                         src = analysis["source"]
@@ -159,14 +141,10 @@ class SimulationRunner:
                         if step_val == step_values[0]: self.log(f"--- .DC Sweep ({src}: {start} to {stop}) ---")
                         
                         dc_results = simulator.solve_dc_sweep(src, start, stop, swp_step)
-                        x_vals = [self.safe_num(r["v_in"]) for r in dc_results]
                         
-                        self.response_data["layout"] = {"title": f"DC Sweep ({src})", "xaxis": f"Source {src} (V)", "yaxis": "Voltage (V)"}
-                        for node_name in nodes_to_plot:
-                            idx = self.circuit.node_mgr.mapping[node_name] - 1
-                            y_vals = [self.safe_num(r["result"].x[idx]) for r in dc_results if r["result"].status == "SUCCESS"]
-                            ls = "dash" if "IN" in node_name.upper() else "solid"
-                            self.response_data["plots"].append({"name": f"V({node_name}){suffix}", "x": x_vals, "y": y_vals, "type": ls})
+                        # 🚀 存入純淨資料湖
+                        self.raw_data["dc"].append({"suffix": suffix, "data": dc_results, "src": src})
+                        self.log(f"[OK] .DC 完成。共 {len(dc_results)} 個點。{suffix}")
 
                     elif atype == "sens":
                         if step_val == step_values[0]: self.log("--- .SENS Sensitivity Analysis ---")
@@ -183,10 +161,8 @@ class SimulationRunner:
                         
                         out_node = parts[0].upper().replace("V(", "").replace("I(", "").replace(")", "").strip()
                         
-                        in_src = None
-                        if len(parts) > 1:
-                            in_src = parts[1].strip().upper()
-                        else:
+                        in_src = parts[1].strip().upper() if len(parts) > 1 else None
+                        if not in_src:
                             v_sources = [el.name for el in self.circuit.elements if el.name.upper().startswith("V")]
                             in_src = v_sources[0] if v_sources else None
 
@@ -208,7 +184,8 @@ class SimulationRunner:
                                 sens_report[f"SENS_ABS({comp})"] = self.safe_num(vals["absolute"])
                                 sens_report[f"SENS_NORM({comp})"] = self.safe_num(vals["normalized"])
                         
-                        self.response_data["op_results"] = sens_report
+                        # 🚀 存入純淨資料湖
+                        self.raw_data["sens"].append({"suffix": suffix, "data": sens_report})
                         if step_val == step_values[-1]: self.log(f"[OK] .SENS 掃描了 {len(components_to_test)} 個元件。")
 
             # 🌟 復原現場
@@ -216,8 +193,110 @@ class SimulationRunner:
                 if hasattr(target_el, 'value'): target_el.value = orig_val
                 elif hasattr(target_el, 'dc_value'): target_el.dc_value = orig_val
 
+            # ==========================================
+            # 🔬 新增：後處理器 (.MEASURE 自動測量)
+            # ==========================================
+            self._evaluate_measures()
+
+            # ==========================================
+            # 🎨 階段 2：繪圖打包器 (Plotly Payload Builder)
+            # ==========================================
+            self._build_frontend_plots(nodes_to_plot)
+
         except Exception as e:
             self.log(f"[ERR] Runner 執行崩潰: {str(e)}")
             traceback.print_exc()
 
         return self.response_data
+
+    def _evaluate_measures(self):
+        """讀取純淨的 raw_data，進行自動測量與數學統計"""
+        measures = self.circuit_json.get("measures", [])
+        if not measures:
+            return
+
+        self.log("--- .MEASURE Results ---")
+        for m in measures:
+            atype = m.get("analysis_type", "tran").lower()
+            name = m.get("name", "UNNAMED").upper()
+            op = m.get("operation", "MAX").upper()
+            target = m.get("target", "").upper()
+
+            # 針對 TRAN 暫態的數據進行計算
+            if atype == 'tran' and self.raw_data["tran"]:
+                data = self.raw_data["tran"][0]["data"] 
+                
+                if not data or target not in data[0]:
+                    self.log(f"[ERR] .MEASURE 無法找到目標變數 {target}")
+                    continue
+                
+                vals = [step[target] for step in data]
+                res_val = 0.0
+                
+                try:
+                    if op == "MAX": res_val = max(vals)
+                    elif op == "MIN": res_val = min(vals)
+                    elif op == "PP": res_val = max(vals) - min(vals)
+                    elif op == "AVG": res_val = sum(vals) / len(vals)
+                    elif op == "RMS": res_val = math.sqrt(sum(v**2 for v in vals) / len(vals))
+                    else:
+                        self.log(f"[WARN] 尚未支援的測量操作: {op}")
+                        continue
+                        
+                    self.log(f"{name} ({op} of {target}): {res_val:.5e}")
+                    self.response_data["op_results"][f"MEAS: {name}"] = res_val
+                    
+                except Exception as e:
+                    self.log(f"[ERR] 計算測量 {name} 失敗: {str(e)}")
+
+    def _build_frontend_plots(self, nodes_to_plot):
+        """將 self.raw_data 轉換成前端 Plotly 專用的 JSON 格式"""
+        
+        # --- OP & SENS 表格報表 ---
+        if self.raw_data["op"]:
+            # 如果沒有 measure_results，初始化它以免覆蓋掉
+            if "op_results" not in self.response_data:
+                self.response_data["op_results"] = {}
+            self.response_data["op_results"].update(self.raw_data["op"][0]["data"])
+        elif self.raw_data["sens"]:
+            self.response_data["op_results"].update(self.raw_data["sens"][0]["data"])
+
+        # --- TRAN 波形 ---
+        if self.raw_data["tran"]:
+            self.response_data["layout"] = { "title": "Transient Response", "xaxis": "Time (s)", "yaxis": "Voltage (V) / Current (A)" }
+            for run in self.raw_data["tran"]:
+                data, suffix = run["data"], run["suffix"]
+                if not data: continue
+                t_vals = [d["time"] for d in data]
+                plot_keys = [k for k in data[0].keys() if k != "time"]
+                for key in plot_keys:
+                    y_vals = [self.safe_num(d.get(key, 0.0)) for d in data]
+                    self.response_data["plots"].append({"name": f"{key}{suffix}", "x": t_vals, "y": y_vals, "type": "solid"})
+            
+            self.response_data["tran_results"] = self.raw_data["tran"][0]["data"]
+
+        # --- AC 波形 ---
+        elif self.raw_data["ac"]:
+            self.response_data["layout"] = {"title": "AC Frequency Response", "xaxis": "Frequency (Hz)", "yaxis": "Magnitude (dB)", "is_ac": True}
+            for run in self.raw_data["ac"]:
+                ac_res, suffix = run["data"], run["suffix"]
+                freqs = [self.safe_num(r["freq"]) for r in ac_res if r["status"] == "SUCCESS"]
+                for node_name in nodes_to_plot:
+                    if 'IN' in node_name.upper(): continue
+                    idx = self.circuit.node_mgr.mapping[node_name] - 1
+                    v_cplx = [r["x"][idx] for r in ac_res if r["status"] == "SUCCESS"]
+                    mags = [self.safe_num(20 * np.log10(np.abs(v) + 1e-20)) for v in v_cplx]
+                    self.response_data["plots"].append({"name": f"Mag V({node_name}){suffix}", "x": freqs, "y": mags, "type": "solid"})
+
+        # --- DC 波形 ---
+        elif self.raw_data["dc"]:
+            src = self.raw_data["dc"][0]["src"]
+            self.response_data["layout"] = {"title": f"DC Sweep ({src})", "xaxis": f"Source {src} (V)", "yaxis": "Voltage (V)"}
+            for run in self.raw_data["dc"]:
+                dc_res, suffix = run["data"], run["suffix"]
+                x_vals = [self.safe_num(r["v_in"]) for r in dc_res]
+                for node_name in nodes_to_plot:
+                    idx = self.circuit.node_mgr.mapping[node_name] - 1
+                    y_vals = [self.safe_num(r["result"].x[idx]) for r in dc_res if r["result"].status == "SUCCESS"]
+                    ls = "dash" if "IN" in node_name.upper() else "solid"
+                    self.response_data["plots"].append({"name": f"V({node_name}){suffix}", "x": x_vals, "y": y_vals, "type": ls})
